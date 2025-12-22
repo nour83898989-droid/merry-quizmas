@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useAccount } from "wagmi"
+import { useFarcaster } from "@/components/providers/farcaster-provider"
 import { fetchUserByFid, fetchUserByAddress } from "@/lib/neynar/client"
 
 export interface FarcasterUser {
@@ -27,31 +28,6 @@ function safeString(val: unknown): string | undefined {
   if (val == null) return undefined
   if (typeof val === "string") return val
   return undefined
-}
-
-function readFidFromSearch(): number | null {
-  try {
-    if (typeof window === "undefined") return null
-    const sp = new URLSearchParams(window.location.search)
-    for (const key of ["fid", "adminFid", "fc_fid"]) {
-      const v = sp.get(key)
-      const n = safeNumber(v)
-      if (n) return n
-    }
-  } catch {}
-  return null
-}
-
-function readFidFromStorage(): number | null {
-  try {
-    if (typeof window === "undefined") return null
-    for (const key of ["fc_fid", "adminFidOverride"]) {
-      const v = localStorage.getItem(key)
-      const n = safeNumber(v)
-      if (n) return n
-    }
-  } catch {}
-  return null
 }
 
 function saveUserToStorage(user: FarcasterUser) {
@@ -86,10 +62,14 @@ function readUserFromStorage(): FarcasterUser | null {
   return null
 }
 
+
 export function useFarcasterUser() {
   const [user, setUser] = useState<FarcasterUser | null>(null)
   const [loading, setLoading] = useState(true)
   const { address, isConnected } = useAccount()
+  
+  // Get user from FarcasterProvider context (avoids duplicate SDK calls)
+  const { user: contextUser, isReady, isInMiniApp } = useFarcaster()
 
   const loadUser = useCallback(async () => {
     let resolved: FarcasterUser | null = null
@@ -100,33 +80,17 @@ export function useFarcasterUser() {
         return
       }
 
-      // 1. Try Farcaster MiniApp SDK first (for Warpcast)
-      try {
-        const { sdk } = await import("@farcaster/miniapp-sdk")
-        
-        // Check if in mini app
-        const inMiniApp = await sdk.isInMiniApp().catch(() => false)
-        
-        if (inMiniApp) {
-          // Get context (it's a Promise)
-          const ctx = await sdk.context
-          if (ctx?.user) {
-            const fid = safeNumber(ctx.user.fid)
-            if (fid) {
-              resolved = {
-                fid,
-                username: safeString(ctx.user.username),
-                displayName: safeString(ctx.user.displayName),
-                pfpUrl: safeString(ctx.user.pfpUrl),
-              }
-            }
-          }
+      // 1. If in MiniApp, use context user from FarcasterProvider (already fetched)
+      if (isInMiniApp && contextUser?.fid) {
+        resolved = {
+          fid: contextUser.fid,
+          username: contextUser.username,
+          displayName: contextUser.displayName,
+          pfpUrl: contextUser.pfpUrl,
         }
-      } catch {
-        // Not in miniapp context
       }
 
-      // 2. If connected wallet, lookup FID from Neynar by address
+      // 2. If connected wallet but no user yet, lookup FID from Neynar by address
       if (!resolved && isConnected && address) {
         try {
           const neynarUser = await fetchUserByAddress(address)
@@ -145,56 +109,15 @@ export function useFarcasterUser() {
         }
       }
 
-      // 3. Try URL params
-      if (!resolved) {
-        const urlFid = readFidFromSearch()
-        if (urlFid) {
-          try {
-            const neynarUser = await fetchUserByFid(urlFid)
-            if (neynarUser) {
-              resolved = {
-                fid: neynarUser.fid,
-                username: neynarUser.username,
-                displayName: neynarUser.displayName,
-                pfpUrl: neynarUser.pfpUrl,
-              }
-            } else {
-              resolved = { fid: urlFid }
-            }
-          } catch {
-            resolved = { fid: urlFid }
-          }
-        }
-      }
-
-      // 4. Try localStorage
+      // 3. Try localStorage as fallback
       if (!resolved) {
         const storedUser = readUserFromStorage()
         if (storedUser) {
           resolved = storedUser
-        } else {
-          const storedFid = readFidFromStorage()
-          if (storedFid) {
-            try {
-              const neynarUser = await fetchUserByFid(storedFid)
-              if (neynarUser) {
-                resolved = {
-                  fid: neynarUser.fid,
-                  username: neynarUser.username,
-                  displayName: neynarUser.displayName,
-                  pfpUrl: neynarUser.pfpUrl,
-                }
-              } else {
-                resolved = { fid: storedFid }
-              }
-            } catch {
-              resolved = { fid: storedFid }
-            }
-          }
         }
       }
 
-      // 5. If we have FID but missing data, fetch from Neynar
+      // 4. If we have FID but missing data, fetch from Neynar
       if (resolved?.fid && (!resolved.username || !resolved.pfpUrl)) {
         try {
           const neynarUser = await fetchUserByFid(resolved.fid)
@@ -222,11 +145,15 @@ export function useFarcasterUser() {
     } finally {
       setLoading(false)
     }
-  }, [address, isConnected])
+  }, [address, isConnected, contextUser, isInMiniApp])
 
+  // Load user when dependencies change
   useEffect(() => {
-    loadUser()
-  }, [loadUser])
+    // Wait for FarcasterProvider to be ready before loading
+    if (isReady) {
+      loadUser()
+    }
+  }, [isReady, loadUser])
 
   const refresh = useCallback(() => {
     setLoading(true)

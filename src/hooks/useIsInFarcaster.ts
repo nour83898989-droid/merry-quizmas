@@ -1,25 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useFarcaster } from '@/components/providers/farcaster-provider'
 
+/**
+ * Hook to check if running inside Farcaster MiniApp
+ * Uses FarcasterProvider context to avoid duplicate SDK calls
+ */
 export function useIsInFarcaster(): boolean {
-  const [isInFarcaster, setIsInFarcaster] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const { sdk } = await import('@farcaster/miniapp-sdk')
-        const inMiniApp = await sdk.isInMiniApp().catch(() => false)
-        if (!cancelled) setIsInFarcaster(!!inMiniApp)
-      } catch {
-        if (!cancelled) setIsInFarcaster(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  return isInFarcaster
+  const { isInMiniApp, isReady } = useFarcaster()
+  
+  // Return false until provider is ready to avoid flash
+  if (!isReady) return false
+  
+  return isInMiniApp
 }

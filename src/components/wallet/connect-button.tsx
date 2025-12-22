@@ -1,48 +1,35 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
 import { Button } from '@/components/ui/button';
+import { useFarcaster } from '@/components/providers/farcaster-provider';
 import { IS_TESTNET } from '@/lib/web3/config';
 import { switchToBase } from '@/lib/web3/client';
-import { useFarcasterUser } from '@/hooks/useFarcasterUser';
-import { useIsInFarcaster } from '@/hooks/useIsInFarcaster';
-import { getMiniAppPlatform } from '@/lib/miniapp/config';
 
 interface ConnectButtonProps {
   onConnect?: (address: string, farcasterUser?: { fid: number; username?: string } | null) => void;
+  showDisconnect?: boolean;
+  size?: 'sm' | 'md' | 'lg';
 }
 
-export function ConnectButton({ onConnect }: ConnectButtonProps) {
+export function ConnectButton({ onConnect, showDisconnect = false, size = 'md' }: ConnectButtonProps) {
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
   const { connect, connectors, isPending } = useConnect();
-  const { user: farcasterUser, loading: fcLoading } = useFarcasterUser();
-  const isInFarcaster = useIsInFarcaster();
+  const { user: farcasterUser, isReady, isInMiniApp } = useFarcaster();
   
   const [isCorrectNetwork, setIsCorrectNetwork] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Get preferred connector based on platform
-  const preferred = useMemo(() => {
-    const far = connectors.find((c) => 
-      /farcaster/i.test(c.name) || /mini.?app/i.test(c.name) || /warp/i.test(c.name)
-    );
-    const inj = connectors.find((c) => 
-      /injected/i.test(c.id) || /injected/i.test(c.name) || /metamask/i.test(c.id)
-    );
-    const cbw = connectors.find((c) => 
-      /coinbase/i.test(c.id) || /coinbase/i.test(c.name)
-    );
-    return { far, inj, cbw };
-  }, [connectors]);
-
   // Notify parent when connected
   useEffect(() => {
-    if (address && farcasterUser) {
-      onConnect?.(address, farcasterUser);
-    } else if (address) {
-      onConnect?.(address, null);
+    if (address && onConnect) {
+      if (farcasterUser?.fid) {
+        onConnect(address, { fid: farcasterUser.fid, username: farcasterUser.username });
+      } else {
+        onConnect(address, null);
+      }
     }
   }, [address, farcasterUser, onConnect]);
 
@@ -70,41 +57,40 @@ export function ConnectButton({ onConnect }: ConnectButtonProps) {
     }
   }, []);
 
+
   const handleConnect = useCallback(async () => {
     setError(null);
-    const platform = getMiniAppPlatform();
     
     try {
       // In Farcaster miniapp, use connectors[0] which is farcasterMiniApp (per official docs)
-      if (platform === 'farcaster' || isInFarcaster) {
-        console.log('[ConnectButton] Connecting with connectors[0]:', connectors[0]?.name);
+      if (isInMiniApp) {
+        console.log('[ConnectButton] In MiniApp, connecting with connectors[0]:', connectors[0]?.name);
         connect({ connector: connectors[0] });
         return;
       }
       
-      // Outside Farcaster, use other connectors
-      let connector;
-      if (platform === 'base' && preferred.cbw) {
-        connector = preferred.cbw;
-      } else {
-        connector = preferred.inj || preferred.cbw || connectors[0];
-      }
+      // Outside Farcaster - find best connector
+      // Priority: injected (MetaMask) > coinbaseWallet > first available
+      const injectedConnector = connectors.find(c => 
+        /injected/i.test(c.id) || /metamask/i.test(c.id)
+      );
+      const coinbaseConnector = connectors.find(c => 
+        /coinbase/i.test(c.id)
+      );
+      
+      const connector = injectedConnector || coinbaseConnector || connectors[1] || connectors[0];
       
       if (connector) {
+        console.log('[ConnectButton] Browser, connecting with:', connector.name);
         connect({ connector });
       } else {
-        // Fallback to window.ethereum
-        if (typeof window !== 'undefined' && window.ethereum) {
-          await window.ethereum.request({ method: 'eth_requestAccounts' });
-        } else {
-          setError('No wallet found. Please install a wallet.');
-        }
+        setError('No wallet found. Please install MetaMask or Coinbase Wallet.');
       }
     } catch (err) {
       console.error('Connect failed:', err);
       setError('Failed to connect. Please try again.');
     }
-  }, [connect, connectors, preferred, isInFarcaster]);
+  }, [connect, connectors, isInMiniApp]);
 
   const handleSwitchNetwork = async () => {
     const success = await switchToBase();
@@ -117,87 +103,77 @@ export function ConnectButton({ onConnect }: ConnectButtonProps) {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
-  // Connected state
+  // Connected state with optional disconnect button
   if (isConnected && address) {
-    return (
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-2 px-3 py-2 bg-surface rounded-xl border border-foreground/10">
-          {/* Farcaster PFP or Network indicator */}
-          {farcasterUser?.pfpUrl ? (
-            <img 
-              src={farcasterUser.pfpUrl} 
-              alt={farcasterUser.username || 'Profile'} 
-              className="w-6 h-6 rounded-full object-cover border border-foreground/20"
-            />
-          ) : (
-            <div 
-              className={`w-2 h-2 rounded-full ${isCorrectNetwork ? 'bg-success' : 'bg-warning'} animate-pulse`}
-              title={isCorrectNetwork ? `Connected to ${IS_TESTNET ? 'Base Sepolia' : 'Base'}` : 'Wrong network'}
-            />
-          )}
-          <span className="text-sm font-medium text-foreground">
-            {fcLoading ? '...' : farcasterUser?.username ? `@${farcasterUser.username}` : truncateAddress(address)}
-          </span>
-          {IS_TESTNET && (
-            <span className="text-xs px-1.5 py-0.5 bg-warning/20 text-warning rounded">
-              Testnet
+    if (showDisconnect) {
+      return (
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 px-3 py-2 bg-surface rounded-xl border border-foreground/10">
+            {farcasterUser?.pfpUrl ? (
+              <img 
+                src={farcasterUser.pfpUrl} 
+                alt={farcasterUser.username || 'Profile'} 
+                className="w-6 h-6 rounded-full object-cover border border-foreground/20"
+              />
+            ) : (
+              <div 
+                className={`w-2 h-2 rounded-full ${isCorrectNetwork ? 'bg-success' : 'bg-warning'} animate-pulse`}
+              />
+            )}
+            <span className="text-sm font-medium text-foreground">
+              {!isReady ? '...' : farcasterUser?.username ? `@${farcasterUser.username}` : truncateAddress(address)}
             </span>
-          )}
+            {IS_TESTNET && (
+              <span className="text-xs px-1.5 py-0.5 bg-warning/20 text-warning rounded">
+                Testnet
+              </span>
+            )}
+          </div>
           {!isCorrectNetwork && (
-            <span className="w-2 h-2 rounded-full bg-warning animate-pulse" title="Wrong network" />
+            <Button variant="ghost" size="sm" onClick={handleSwitchNetwork} className="text-warning">
+              Switch
+            </Button>
           )}
-        </div>
-        {!isCorrectNetwork && (
-          <Button variant="ghost" size="sm" onClick={handleSwitchNetwork} className="text-warning">
-            Switch
+          <Button variant="ghost" size="sm" onClick={() => disconnect()}>
+            <DisconnectIcon className="w-4 h-4" />
           </Button>
+        </div>
+      );
+    }
+    
+    // Simple connected indicator (no disconnect)
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 bg-surface rounded-xl border border-foreground/10">
+        {farcasterUser?.pfpUrl ? (
+          <img 
+            src={farcasterUser.pfpUrl} 
+            alt={farcasterUser.username || 'Profile'} 
+            className="w-6 h-6 rounded-full object-cover"
+          />
+        ) : (
+          <div className={`w-2 h-2 rounded-full ${isCorrectNetwork ? 'bg-success' : 'bg-warning'}`} />
         )}
-        <Button variant="ghost" size="sm" onClick={() => disconnect()}>
-          <DisconnectIcon className="w-4 h-4" />
-        </Button>
+        <span className="text-sm font-medium">
+          {!isReady ? '...' : farcasterUser?.username ? `@${farcasterUser.username}` : truncateAddress(address)}
+        </span>
       </div>
     );
   }
 
-  // Not connected - show login buttons based on platform
-  const platform = getMiniAppPlatform();
 
+  // Not connected - show connect button
   return (
     <div className="flex flex-col items-end gap-1">
-      <div className="flex items-center gap-2">
-        {/* In Farcaster, show single connect button */}
-        {isInFarcaster || platform === 'farcaster' ? (
-          <Button
-            onClick={handleConnect}
-            isLoading={isPending}
-            className="christmas-gradient text-white"
-          >
-            <WalletIcon className="w-4 h-4 mr-2" />
-            Connect
-          </Button>
-        ) : (
-          <>
-            {/* Browser: show Farcaster + Wallet buttons */}
-            <Button
-              onClick={() => connectors[0] && connect({ connector: connectors[0] })}
-              isLoading={isPending}
-              variant="secondary"
-              size="sm"
-            >
-              Farcaster
-            </Button>
-            <Button
-              onClick={handleConnect}
-              isLoading={isPending}
-              className="christmas-gradient text-white"
-            >
-              <WalletIcon className="w-4 h-4 mr-2" />
-              Wallet
-              {IS_TESTNET && <span className="ml-1 text-xs opacity-75">(Testnet)</span>}
-            </Button>
-          </>
-        )}
-      </div>
+      <Button
+        onClick={handleConnect}
+        isLoading={isPending}
+        size={size}
+        className="christmas-gradient text-white"
+      >
+        <WalletIcon className="w-4 h-4 mr-2" />
+        Connect
+        {IS_TESTNET && <span className="ml-1 text-xs opacity-75">(Testnet)</span>}
+      </Button>
       {error && (
         <p className="text-xs text-error">{error}</p>
       )}

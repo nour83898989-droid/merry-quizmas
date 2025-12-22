@@ -3,60 +3,50 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useAccount, useDisconnect } from 'wagmi';
 import { Button } from '@/components/ui/button';
+import { ConnectButton } from '@/components/wallet/connect-button';
+import { useFarcaster } from '@/components/providers/farcaster-provider';
 import { IS_TESTNET } from '@/lib/web3/config';
 import { getCurrentNetwork, switchToBase } from '@/lib/web3/client';
 
 export function Navbar() {
   const pathname = usePathname();
-  const [address, setAddress] = useState<string | null>(null);
+  const { address, isConnected } = useAccount();
+  const { disconnect } = useDisconnect();
+  const { user: farcasterUser, isReady } = useFarcaster();
+  
   const [isCorrectNetwork, setIsCorrectNetwork] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Check wallet on mount
+  // Check network when connected
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.ethereum) {
-      // Check existing connection
-      window.ethereum.request({ method: 'eth_accounts' }).then((result) => {
-        const accounts = result as string[];
-        if (accounts && accounts.length > 0) {
-          setAddress(accounts[0]);
-          checkNetwork();
-          checkAdminStatus(accounts[0]);
-        }
-      });
-
-      // Listen for account changes
-      window.ethereum.on?.('accountsChanged', (accounts: unknown) => {
-        const accs = accounts as string[];
-        if (accs && accs.length > 0) {
-          setAddress(accs[0]);
-          checkAdminStatus(accs[0]);
-        } else {
-          setAddress(null);
-          setIsAdmin(false);
-        }
-      });
-
-      // Listen for network changes
-      window.ethereum.on?.('chainChanged', () => checkNetwork());
+    if (isConnected) {
+      checkNetwork();
     }
-  }, []);
+  }, [isConnected]);
 
-  // Check if user is admin
-  const checkAdminStatus = async (wallet: string) => {
-    try {
-      const res = await fetch('/api/admin', {
-        headers: { 'x-wallet-address': wallet },
-      });
-      setIsAdmin(res.ok);
-    } catch {
+  // Check admin status when address changes
+  useEffect(() => {
+    if (address) {
+      checkAdminStatus(address);
+    } else {
       setIsAdmin(false);
     }
-  };
+  }, [address]);
+
+  // Listen for network changes
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.ethereum) {
+      const handleChainChanged = () => checkNetwork();
+      window.ethereum.on?.('chainChanged', handleChainChanged);
+      return () => {
+        window.ethereum?.removeListener?.('chainChanged', handleChainChanged);
+      };
+    }
+  }, []);
 
   // Close menu on outside click
   useEffect(() => {
@@ -69,6 +59,18 @@ export function Navbar() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+
+  const checkAdminStatus = async (wallet: string) => {
+    try {
+      const res = await fetch('/api/admin', {
+        headers: { 'x-wallet-address': wallet },
+      });
+      setIsAdmin(res.ok);
+    } catch {
+      setIsAdmin(false);
+    }
+  };
+
   const checkNetwork = async () => {
     const network = await getCurrentNetwork();
     if (network) {
@@ -76,35 +78,14 @@ export function Navbar() {
     }
   };
 
-  const connectWallet = async () => {
-    if (typeof window === 'undefined' || !window.ethereum) return;
-    
-    setIsConnecting(true);
-    try {
-      const result = await window.ethereum.request({ method: 'eth_requestAccounts' });
-      const accounts = result as string[];
-      if (accounts && accounts.length > 0) {
-        setAddress(accounts[0]);
-        const network = await getCurrentNetwork();
-        if (network && !network.isCorrect) {
-          await switchToBase();
-        }
-      }
-    } catch (err) {
-      console.error('Failed to connect:', err);
-    } finally {
-      setIsConnecting(false);
-    }
-  };
-
-  const disconnectWallet = () => {
-    setAddress(null);
-    setMenuOpen(false);
-  };
-
   const handleSwitchNetwork = async () => {
     const success = await switchToBase();
     if (success) setIsCorrectNetwork(true);
+  };
+
+  const handleDisconnect = () => {
+    disconnect();
+    setMenuOpen(false);
   };
 
   const truncateAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -154,10 +135,11 @@ export function Navbar() {
             ))}
           </div>
 
+
           {/* Wallet & Menu */}
           <div className="flex items-center gap-2">
             {/* Network Warning */}
-            {address && !isCorrectNetwork && (
+            {isConnected && !isCorrectNetwork && (
               <button
                 onClick={handleSwitchNetwork}
                 className="px-2 py-1 text-xs bg-warning/20 text-warning rounded-lg hover:bg-warning/30"
@@ -166,15 +148,35 @@ export function Navbar() {
               </button>
             )}
 
-            {/* Wallet Button */}
-            {address ? (
+            {/* Connected State - Show PFP/Username or Address */}
+            {isConnected && address ? (
               <div className="relative" ref={menuRef}>
                 <button
                   onClick={() => setMenuOpen(!menuOpen)}
                   className="flex items-center gap-2 px-3 py-2 bg-surface rounded-xl border border-foreground/10 hover:border-foreground/20 transition-colors"
                 >
-                  <div className={`w-2 h-2 rounded-full ${isCorrectNetwork ? 'bg-success' : 'bg-warning'}`} />
-                  <span className="text-sm font-medium text-foreground">{truncateAddress(address)}</span>
+                  {/* Farcaster PFP */}
+                  {farcasterUser?.pfpUrl ? (
+                    <img 
+                      src={farcasterUser.pfpUrl} 
+                      alt={farcasterUser.username || 'Profile'} 
+                      className="w-6 h-6 rounded-full object-cover border border-foreground/20"
+                    />
+                  ) : (
+                    <div className={`w-2 h-2 rounded-full ${isCorrectNetwork ? 'bg-success' : 'bg-warning'}`} />
+                  )}
+                  
+                  {/* Username or Address */}
+                  <span className="text-sm font-medium text-foreground">
+                    {!isReady ? '...' : farcasterUser?.username ? `@${farcasterUser.username}` : truncateAddress(address)}
+                  </span>
+                  
+                  {IS_TESTNET && (
+                    <span className="text-xs px-1.5 py-0.5 bg-warning/20 text-warning rounded">
+                      Testnet
+                    </span>
+                  )}
+                  
                   <ChevronIcon className={`w-4 h-4 text-foreground-muted transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
                 </button>
 
@@ -200,7 +202,7 @@ export function Navbar() {
                     )}
                     <div className="border-t border-foreground/10 my-1" />
                     <button
-                      onClick={disconnectWallet}
+                      onClick={handleDisconnect}
                       className="w-full px-4 py-2 text-sm text-left text-error hover:bg-error/5"
                     >
                       🚪 Disconnect
@@ -209,14 +211,8 @@ export function Navbar() {
                 )}
               </div>
             ) : (
-              <Button
-                onClick={connectWallet}
-                isLoading={isConnecting}
-                size="sm"
-                className="christmas-gradient text-white"
-              >
-                Connect
-              </Button>
+              /* Not Connected - Show ConnectButton */
+              <ConnectButton />
             )}
 
             {/* Mobile Menu Button */}
@@ -228,6 +224,7 @@ export function Navbar() {
             </button>
           </div>
         </div>
+
 
         {/* Mobile Nav */}
         {menuOpen && (
