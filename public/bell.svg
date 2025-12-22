@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Pixel Art Christmas Bell -->
+  <!-- Ribbon -->
+  <rect fill="#ef4444" x="12" y="0" width="8" height="4"/>
+  <rect fill="#c41e3a" x="14" y="2" width="4" height="2"/>
+  <!-- Bell top -->
+  <rect fill="#ffd700" x="14" y="4" width="4" height="2"/>
+  <rect fill="#ffd700" x="12" y="6" width="8" height="2"/>
+  <rect fill="#ffd700" x="10" y="8" width="12" height="2"/>
+  <!-- Bell body -->
+  <rect fill="#fbbf24" x="8" y="10" width="16" height="4"/>
+  <rect fill="#fbbf24" x="6" y="14" width="20" height="4"/>
+  <rect fill="#fbbf24" x="4" y="18" width="24" height="4"/>
+  <!-- Bell bottom rim -->
+  <rect fill="#ffd700" x="2" y="22" width="28" height="2"/>
+  <rect fill="#f59e0b" x="4" y="24" width="24" height="2"/>
+  <!-- Clapper -->
+  <rect fill="#8B4513" x="14" y="26" width="4" height="2"/>
+  <rect fill="#a0522d" x="12" y="28" width="8" height="4"/>
+  <!-- Shine -->
+  <rect fill="#ffed4a" x="10" y="12" width="2" height="6"/>
+  <rect fill="#ffed4a" x="12" y="10" width="2" height="2"/>
+</svg>

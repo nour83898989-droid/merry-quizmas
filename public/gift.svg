@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Pixel Art Gift Box -->
+  <!-- Lid -->
+  <rect fill="#c41e3a" x="2" y="8" width="28" height="6"/>
+  <!-- Box -->
+  <rect fill="#ef4444" x="4" y="14" width="24" height="16"/>
+  <!-- Ribbon vertical -->
+  <rect fill="#ffd700" x="14" y="8" width="4" height="22"/>
+  <!-- Ribbon horizontal -->
+  <rect fill="#ffd700" x="2" y="10" width="28" height="2"/>
+  <!-- Bow -->
+  <rect fill="#ffd700" x="10" y="2" width="4" height="6"/>
+  <rect fill="#ffd700" x="18" y="2" width="4" height="6"/>
+  <rect fill="#ffd700" x="12" y="4" width="8" height="4"/>
+  <rect fill="#ffed4a" x="14" y="4" width="4" height="4"/>
+</svg>
