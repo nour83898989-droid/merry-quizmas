@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
+import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
 import { Button } from '@/components/ui/button';
 import { IS_TESTNET } from '@/lib/web3/config';
 import { switchToBase } from '@/lib/web3/client';
@@ -75,11 +76,16 @@ export function ConnectButton({ onConnect }: ConnectButtonProps) {
     const platform = getMiniAppPlatform();
     
     try {
-      let connector;
+      // In Farcaster miniapp, use farcasterMiniApp() connector directly
+      if (platform === 'farcaster' || isInFarcaster) {
+        console.log('[ConnectButton] Connecting with farcasterMiniApp connector');
+        connect({ connector: farcasterMiniApp() });
+        return;
+      }
       
-      if (platform === 'farcaster' && preferred.far) {
-        connector = preferred.far;
-      } else if (platform === 'base' && preferred.cbw) {
+      // Outside Farcaster, use other connectors
+      let connector;
+      if (platform === 'base' && preferred.cbw) {
         connector = preferred.cbw;
       } else {
         connector = preferred.inj || preferred.cbw || connectors[0];
@@ -99,7 +105,7 @@ export function ConnectButton({ onConnect }: ConnectButtonProps) {
       console.error('Connect failed:', err);
       setError('Failed to connect. Please try again.');
     }
-  }, [connect, connectors, preferred]);
+  }, [connect, connectors, preferred, isInFarcaster]);
 
   const handleSwitchNetwork = async () => {
     const success = await switchToBase();
@@ -173,16 +179,14 @@ export function ConnectButton({ onConnect }: ConnectButtonProps) {
         ) : (
           <>
             {/* Browser: show Farcaster + Wallet buttons */}
-            {preferred.far && (
-              <Button
-                onClick={() => preferred.far && connect({ connector: preferred.far })}
-                isLoading={isPending}
-                variant="secondary"
-                size="sm"
-              >
-                Farcaster
-              </Button>
-            )}
+            <Button
+              onClick={() => connect({ connector: farcasterMiniApp() })}
+              isLoading={isPending}
+              variant="secondary"
+              size="sm"
+            >
+              Farcaster
+            </Button>
             <Button
               onClick={handleConnect}
               isLoading={isPending}

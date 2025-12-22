@@ -13,7 +13,7 @@ const activeChain = IS_TESTNET ? baseSepolia : base;
 
 const queryClient = new QueryClient();
 
-// Create wagmi config with multiple connectors for cross-platform support
+// Create wagmi config - connectors added separately for flexibility
 const config = createConfig({
   chains: [base, baseSepolia],
   transports: {
@@ -21,7 +21,6 @@ const config = createConfig({
     [baseSepolia.id]: http(),
   },
   connectors: [
-    farcasterMiniApp(),
     injected(),
     coinbaseWallet({ appName: 'Merry Quizmas' }),
   ],
@@ -53,24 +52,24 @@ export function useFarcaster() {
   return useContext(FarcasterContext);
 }
 
-// Auto-connect component that runs inside WagmiProvider
-function AutoConnectWallet() {
+// Export the connector for use in connect buttons
+export { farcasterMiniApp };
+
+// Auto-connect component - connects using farcasterMiniApp connector directly
+function AutoConnectWallet({ isInMiniApp }: { isInMiniApp: boolean }) {
   const { isConnected } = useAccount();
-  const { connect, connectors } = useConnect();
+  const { connect } = useConnect();
+  const [attempted, setAttempted] = useState(false);
   
   useEffect(() => {
-    // Auto-connect to Farcaster wallet if not connected
-    if (!isConnected) {
-      const farcasterConnector = connectors.find(c => 
-        /farcaster/i.test(c.name) || /mini.?app/i.test(c.name)
-      );
-      
-      if (farcasterConnector) {
-        console.log('[Farcaster] Auto-connecting to wallet...');
-        connect({ connector: farcasterConnector });
-      }
+    // Only auto-connect once, and only if in mini app
+    if (!isConnected && !attempted && isInMiniApp) {
+      setAttempted(true);
+      console.log('[Farcaster] Auto-connecting wallet...');
+      // Use farcasterMiniApp() directly as per official example
+      connect({ connector: farcasterMiniApp() });
     }
-  }, [isConnected, connect, connectors]);
+  }, [isConnected, attempted, isInMiniApp, connect]);
   
   return null;
 }
@@ -92,24 +91,35 @@ function FarcasterInitializer({
       try {
         const { sdk } = await import('@farcaster/miniapp-sdk');
         
+        // CRITICAL: Call sdk.actions.ready() FIRST - this signals to Farcaster that app is ready
+        // This must be called regardless of isInMiniApp check
+        try {
+          await sdk.actions.ready();
+          console.log('[Farcaster] SDK ready called');
+        } catch (readyError) {
+          console.log('[Farcaster] SDK ready error (expected outside miniapp):', readyError);
+        }
+        
         // Check if in mini app
         isInMiniApp = await sdk.isInMiniApp().catch(() => false);
+        console.log('[Farcaster] isInMiniApp:', isInMiniApp);
         
         if (isInMiniApp) {
           // Get user context - sdk.context is a Promise in v0.2.x
-          const ctx = await sdk.context;
-          if (ctx?.user) {
-            user = {
-              fid: ctx.user.fid,
-              username: ctx.user.username,
-              displayName: ctx.user.displayName,
-              pfpUrl: ctx.user.pfpUrl,
-            };
+          try {
+            const ctx = await sdk.context;
+            if (ctx?.user) {
+              user = {
+                fid: ctx.user.fid,
+                username: ctx.user.username,
+                displayName: ctx.user.displayName,
+                pfpUrl: ctx.user.pfpUrl,
+              };
+              console.log('[Farcaster] User context:', user?.username);
+            }
+          } catch (ctxError) {
+            console.log('[Farcaster] Context error:', ctxError);
           }
-          
-          // Signal ready to Farcaster - CRITICAL for mobile
-          await sdk.actions.ready();
-          console.log('[Farcaster] SDK ready called, user:', user?.username);
         }
       } catch (e) {
         console.log('[Farcaster] SDK init error:', e);
@@ -151,8 +161,8 @@ export function FarcasterProvider({ children }: { children: ReactNode }) {
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <FarcasterContext.Provider value={contextValue}>
-          <AutoConnectWallet />
           <FarcasterInitializer onReady={handleReady}>
+            <AutoConnectWallet isInMiniApp={isInMiniApp} />
             {children}
           </FarcasterInitializer>
         </FarcasterContext.Provider>
