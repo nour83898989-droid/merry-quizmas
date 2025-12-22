@@ -30,7 +30,7 @@ export async function shareQuiz(options: ShareQuizOptions): Promise<void> {
   // Try Farcaster SDK first
   if (typeof window !== 'undefined') {
     try {
-      const { sdk } = await import('@farcaster/frame-sdk');
+      const { sdk } = await import('@farcaster/miniapp-sdk');
       
       // Check if we're in a Farcaster mini app
       const context = await sdk.context;
