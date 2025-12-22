@@ -1,105 +1,105 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useAccount, useConnect, useDisconnect } from 'wagmi';
 import { Button } from '@/components/ui/button';
 import { IS_TESTNET } from '@/lib/web3/config';
-import { getCurrentNetwork, switchToBase } from '@/lib/web3/client';
-import { fetchUserByAddress, type FarcasterUserData } from '@/lib/neynar/client';
+import { switchToBase } from '@/lib/web3/client';
+import { useFarcasterUser } from '@/hooks/useFarcasterUser';
+import { useIsInFarcaster } from '@/hooks/useIsInFarcaster';
+import { getMiniAppPlatform } from '@/lib/miniapp/config';
 
 interface ConnectButtonProps {
-  onConnect?: (address: string, farcasterUser?: FarcasterUserData | null) => void;
+  onConnect?: (address: string, farcasterUser?: { fid: number; username?: string } | null) => void;
 }
 
 export function ConnectButton({ onConnect }: ConnectButtonProps) {
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [address, setAddress] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { address, isConnected } = useAccount();
+  const { disconnect } = useDisconnect();
+  const { connect, connectors, isPending } = useConnect();
+  const { user: farcasterUser, loading: fcLoading } = useFarcasterUser();
+  const isInFarcaster = useIsInFarcaster();
+  
   const [isCorrectNetwork, setIsCorrectNetwork] = useState(true);
-  const [farcasterUser, setFarcasterUser] = useState<FarcasterUserData | null>(null);
-  const [fcLoading, setFcLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Lookup Farcaster user when address changes
+  // Get preferred connector based on platform
+  const preferred = useMemo(() => {
+    const far = connectors.find((c) => 
+      /farcaster/i.test(c.name) || /mini.?app/i.test(c.name) || /warp/i.test(c.name)
+    );
+    const inj = connectors.find((c) => 
+      /injected/i.test(c.id) || /injected/i.test(c.name) || /metamask/i.test(c.id)
+    );
+    const cbw = connectors.find((c) => 
+      /coinbase/i.test(c.id) || /coinbase/i.test(c.name)
+    );
+    return { far, inj, cbw };
+  }, [connectors]);
+
+  // Notify parent when connected
   useEffect(() => {
-    if (!address) {
-      setFarcasterUser(null);
-      return;
+    if (address && farcasterUser) {
+      onConnect?.(address, farcasterUser);
+    } else if (address) {
+      onConnect?.(address, null);
     }
-    
-    setFcLoading(true);
-    fetchUserByAddress(address)
-      .then(user => {
-        setFarcasterUser(user);
-        onConnect?.(address, user);
-      })
-      .catch(() => setFarcasterUser(null))
-      .finally(() => setFcLoading(false));
-  }, [address]);
+  }, [address, farcasterUser, onConnect]);
 
-  // Check network on mount and listen for changes
+  // Check network
   useEffect(() => {
     const checkNetwork = async () => {
-      const network = await getCurrentNetwork();
-      if (network) {
-        setIsCorrectNetwork(network.isCorrect);
+      if (typeof window !== 'undefined' && window.ethereum) {
+        try {
+          const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+          const expectedChainId = IS_TESTNET ? '0x14a34' : '0x2105'; // Base Sepolia or Base
+          setIsCorrectNetwork(chainId === expectedChainId);
+        } catch {
+          setIsCorrectNetwork(true);
+        }
       }
     };
 
+    checkNetwork();
+    
     if (typeof window !== 'undefined' && window.ethereum) {
-      // Check if already connected
-      window.ethereum.request({ method: 'eth_accounts' }).then((result) => {
-        const accounts = result as string[];
-        if (accounts && accounts.length > 0) {
-          setAddress(accounts[0]);
-        }
-      });
-      
-      checkNetwork();
-      window.ethereum.on?.('chainChanged', () => checkNetwork());
-      window.ethereum.on?.('accountsChanged', (accounts: unknown) => {
-        const accs = accounts as string[];
-        if (accs && accs.length > 0) {
-          setAddress(accs[0]);
-        } else {
-          setAddress(null);
-          setFarcasterUser(null);
-        }
-      });
+      window.ethereum.on?.('chainChanged', checkNetwork);
+      return () => {
+        window.ethereum?.removeListener?.('chainChanged', checkNetwork);
+      };
     }
   }, []);
 
-  const connectWallet = async () => {
-    setIsConnecting(true);
+  const handleConnect = useCallback(async () => {
     setError(null);
-
+    const platform = getMiniAppPlatform();
+    
     try {
-      // Check if ethereum provider exists (MetaMask, etc.)
-      if (typeof window !== 'undefined' && window.ethereum) {
-        const result = await window.ethereum.request({
-          method: 'eth_requestAccounts',
-        });
-        const accounts = result as string[];
-        
-        if (accounts && accounts.length > 0) {
-          const addr = accounts[0];
-          setAddress(addr);
-          onConnect?.(addr);
-          
-          // Check and switch network if needed
-          const network = await getCurrentNetwork();
-          if (network && !network.isCorrect) {
-            await switchToBase();
-          }
-        }
+      let connector;
+      
+      if (platform === 'farcaster' && preferred.far) {
+        connector = preferred.far;
+      } else if (platform === 'base' && preferred.cbw) {
+        connector = preferred.cbw;
       } else {
-        setError('No wallet found. Please install MetaMask or another wallet.');
+        connector = preferred.inj || preferred.cbw || connectors[0];
+      }
+      
+      if (connector) {
+        connect({ connector });
+      } else {
+        // Fallback to window.ethereum
+        if (typeof window !== 'undefined' && window.ethereum) {
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
+        } else {
+          setError('No wallet found. Please install a wallet.');
+        }
       }
     } catch (err) {
-      console.error('Failed to connect wallet:', err);
-      setError('Failed to connect wallet. Please try again.');
-    } finally {
-      setIsConnecting(false);
+      console.error('Connect failed:', err);
+      setError('Failed to connect. Please try again.');
     }
-  };
+  }, [connect, connectors, preferred]);
 
   const handleSwitchNetwork = async () => {
     const success = await switchToBase();
@@ -108,15 +108,12 @@ export function ConnectButton({ onConnect }: ConnectButtonProps) {
     }
   };
 
-  const disconnectWallet = () => {
-    setAddress(null);
-  };
-
   const truncateAddress = (addr: string) => {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
-  if (address) {
+  // Connected state
+  if (isConnected && address) {
     return (
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-2 px-3 py-2 bg-surface rounded-xl border border-foreground/10">
@@ -150,24 +147,54 @@ export function ConnectButton({ onConnect }: ConnectButtonProps) {
             Switch
           </Button>
         )}
-        <Button variant="ghost" size="sm" onClick={disconnectWallet}>
+        <Button variant="ghost" size="sm" onClick={() => disconnect()}>
           <DisconnectIcon className="w-4 h-4" />
         </Button>
       </div>
     );
   }
 
+  // Not connected - show login buttons based on platform
+  const platform = getMiniAppPlatform();
+
   return (
     <div className="flex flex-col items-end gap-1">
-      <Button
-        onClick={connectWallet}
-        isLoading={isConnecting}
-        className="christmas-gradient text-white"
-      >
-        <WalletIcon className="w-4 h-4 mr-2" />
-        Connect Wallet
-        {IS_TESTNET && <span className="ml-1 text-xs opacity-75">(Testnet)</span>}
-      </Button>
+      <div className="flex items-center gap-2">
+        {/* In Farcaster, show single connect button */}
+        {isInFarcaster || platform === 'farcaster' ? (
+          <Button
+            onClick={handleConnect}
+            isLoading={isPending}
+            className="christmas-gradient text-white"
+          >
+            <WalletIcon className="w-4 h-4 mr-2" />
+            Connect
+          </Button>
+        ) : (
+          <>
+            {/* Browser: show Farcaster + Wallet buttons */}
+            {preferred.far && (
+              <Button
+                onClick={() => preferred.far && connect({ connector: preferred.far })}
+                isLoading={isPending}
+                variant="secondary"
+                size="sm"
+              >
+                Farcaster
+              </Button>
+            )}
+            <Button
+              onClick={handleConnect}
+              isLoading={isPending}
+              className="christmas-gradient text-white"
+            >
+              <WalletIcon className="w-4 h-4 mr-2" />
+              Wallet
+              {IS_TESTNET && <span className="ml-1 text-xs opacity-75">(Testnet)</span>}
+            </Button>
+          </>
+        )}
+      </div>
       {error && (
         <p className="text-xs text-error">{error}</p>
       )}

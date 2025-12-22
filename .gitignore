@@ -63,4 +63,13 @@ supabase/.temp
 *.tar.gz
 *.rar
 
+# Playwright test results and reports
+test-results/
+playwright-report/
+e2e/**/*-snapshots/
+
+# Foundry compiled contracts (can be regenerated)
+contracts/out/
+contracts/cache/
+
 .vercel
