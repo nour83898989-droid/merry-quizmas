@@ -1,7 +1,14 @@
 # Onchain Integration Analysis
 
+## Deployment Status (Dec 2024)
+- **Frontend:** Vercel (Production) - https://merry-quizmas.vercel.app
+- **Database:** Supabase (Production) - Realtime enabled
+- **Network:** Base Sepolia (Testnet) for transaction testing
+- **Contract:** QuizRewardPool deployed at `0x2A00470b7d2Ef9a48CB27CbEC5b8DbB283FF7731`
+
 ## Overview
-Dokumen ini berisi analisis lengkap tentang file-file yang berinteraksi dengan blockchain dan mock data yang perlu diperbaiki untuk testing di Base Sepolia.
+Dokumen ini berisi analisis lengkap tentang file-file yang berinteraksi dengan blockchain.
+Semua transaksi adalah REAL onchain - tidak ada mock data.
 
 ## Files dengan Interaksi Onchain
 
@@ -74,43 +81,21 @@ Dokumen ini berisi analisis lengkap tentang file-file yang berinteraksi dengan b
 
 ---
 
-## 🔴 MOCK DATA YANG PERLU DIPERBAIKI
+## ✅ ALL MOCK DATA REMOVED (Dec 2024)
 
-### 1. API Routes dengan Mock TX Hash
+### API Routes Updated:
+- `/api/rewards/claim/route.ts` - Now requires real txHash from frontend
+- `/api/rewards/claim-all/route.ts` - Now requires array of {rewardId, txHash}
+- `/api/rewards/[id]/claim/route.ts` - Already accepts real txHash
 
-#### `src/app/api/rewards/claim/route.ts`
-```typescript
-// Line 80-81: MOCK TX HASH!
-const mockTxHash = `0x${Date.now().toString(16)}${Math.random().toString(16).slice(2, 10)}`;
+### Correct Flow (No Mock):
 ```
-**Problem:** API ini generate fake tx hash, bukan dari real transaction
-**Impact:** Database menyimpan fake tx hash
-**Fix:** API ini seharusnya TIDAK generate tx hash. Frontend yang call contract dan kirim real tx hash ke API.
-
-#### `src/app/api/rewards/claim-all/route.ts`
-```typescript
-// Line 79-80: MOCK TX HASH!
-const mockTxHash = `0x${Date.now().toString(16)}${Math.random().toString(16).slice(2, 10)}`;
+Frontend: claimRewardOnChain() → Real TX → Wait confirmation
+    ↓
+API: POST /api/rewards/claim with { rewardId, txHash }
+    ↓
+Database: Update with real txHash
 ```
-**Problem:** Same as above
-**Fix:** Same as above
-
-### 2. Analisis Flow yang Benar vs Salah
-
-#### ❌ FLOW SALAH (Current API):
-```
-Frontend → POST /api/rewards/claim → API generates mock tx hash → Save to DB
-```
-
-#### ✅ FLOW BENAR (claim/page.tsx sudah benar):
-```
-Frontend → claimRewardOnChain() → Real TX → Wait confirmation → POST /api/rewards/{id}/claim with real txHash
-```
-
-**Kesimpulan:** 
-- `claim/page.tsx` sudah benar - call contract dulu, baru update DB
-- API `/api/rewards/claim` dan `/api/rewards/claim-all` adalah LEGACY dan tidak dipakai oleh frontend yang benar
-- API ini mungkin untuk testing atau fallback, tapi seharusnya di-disable atau di-update
 
 ---
 
@@ -228,17 +213,12 @@ NEXT_PUBLIC_BASE_SEPOLIA_RPC=https://sepolia.base.org
 
 ## Recommendations
 
-### 1. Remove/Update Legacy API Routes
-The `/api/rewards/claim` and `/api/rewards/claim-all` routes generate mock tx hashes. Options:
-- **Option A:** Delete these routes (frontend doesn't use them for onchain quizzes)
-- **Option B:** Update to require real txHash from frontend
-- **Option C:** Add flag to distinguish legacy vs onchain quizzes
+### ✅ COMPLETED:
+1. Removed mock txHash from API routes - now requires real txHash
+2. All onchain transactions use real gas fees on Base Sepolia
+3. Frontend handles approve → transaction → wait → update DB flow
 
-### 2. Add Contract Event Listeners (Future)
-For better UX, add event listeners for:
-- `QuizCreated` - confirm quiz creation
-- `ParticipantJoined` - confirm join
-- `RewardClaimed` - confirm claim
-
-### 3. Add Transaction Status UI
-Show pending/confirmed/failed status for all transactions.
+### Future Improvements:
+1. Add transaction status UI (pending/confirmed/failed)
+2. Add contract event listeners for better UX
+3. Implement batch transactions using EIP-5792 (wallet_sendCalls)

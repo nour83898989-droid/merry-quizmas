@@ -1,5 +1,13 @@
 /**
- * POST /api/rewards/claim-all - Claim all pending rewards
+ * POST /api/rewards/claim-all - Update multiple rewards after onchain claims
+ * 
+ * IMPORTANT: This route expects the frontend to have already executed
+ * the onchain transactions. It only updates the database with real txHashes.
+ * 
+ * For onchain claims, use:
+ * 1. Frontend calls claimRewardOnChain() for each reward
+ * 2. Wait for tx confirmations
+ * 3. Call this API with the real txHashes
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -10,13 +18,12 @@ import { getAuthFromRequest } from '@/lib/auth/middleware';
 export const dynamic = 'force-dynamic';
 
 interface ClaimAllRequest {
-  rewardIds: string[];
+  claims: Array<{
+    rewardId: string;
+    txHash: string;
+  }>;
 }
 
-/**
- * POST /api/rewards/claim-all
- * Process multiple reward claims at once
- */
 export async function POST(request: NextRequest) {
   try {
     // Authenticate user
@@ -30,90 +37,78 @@ export async function POST(request: NextRequest) {
 
     const walletAddress = authResult.user.address;
     const body: ClaimAllRequest = await request.json();
-    const { rewardIds } = body;
+    const { claims } = body;
 
-    if (!rewardIds || rewardIds.length === 0) {
+    if (!claims || claims.length === 0) {
       return NextResponse.json(
-        { error: 'BAD_REQUEST', message: 'Reward IDs required' },
+        { error: 'BAD_REQUEST', message: 'Claims array required' },
         { status: 400 }
       );
     }
 
+    // Validate all txHashes
+    for (const claim of claims) {
+      if (!claim.txHash || !claim.txHash.startsWith('0x')) {
+        return NextResponse.json(
+          { error: 'BAD_REQUEST', message: `Invalid txHash for reward ${claim.rewardId}` },
+          { status: 400 }
+        );
+      }
+    }
+
     const supabase = createServerClient();
-
-    // Fetch all pending claims for this user
-    const { data: claims, error: claimsError } = await supabase
-      .from('reward_claims')
-      .select('*')
-      .in('id', rewardIds)
-      .eq('wallet_address', walletAddress)
-      .eq('status', 'pending');
-
-    if (claimsError) {
-      console.error('Failed to fetch claims:', claimsError);
-      return NextResponse.json(
-        { error: 'INTERNAL_ERROR', message: 'Failed to fetch claims' },
-        { status: 500 }
-      );
-    }
-
-    if (!claims || claims.length === 0) {
-      return NextResponse.json(
-        { error: 'NOT_FOUND', message: 'No pending rewards found' },
-        { status: 404 }
-      );
-    }
-
-    // Calculate total amount
-    const totalAmount = claims.reduce(
-      (sum, claim) => sum + (claim.reward_amount || 0),
-      0
-    );
-
-    // In production, here you would:
-    // 1. Batch transfer tokens via smart contract
-    // 2. Or send total amount from treasury
-    // 3. Get the transaction hash
-    
-    // For now, we simulate with a mock tx hash
-    const mockTxHash = `0x${Date.now().toString(16)}${Math.random().toString(16).slice(2, 10)}`;
     const claimedAt = new Date().toISOString();
+    let successCount = 0;
+    let failCount = 0;
 
-    // Update all claims
-    const claimIds = claims.map(c => c.id);
-    const { error: updateError } = await supabase
-      .from('reward_claims')
-      .update({
-        status: 'claimed',
-        tx_hash: mockTxHash,
-        claimed_at: claimedAt,
-      })
-      .in('id', claimIds);
+    // Update each claim with its real txHash
+    for (const claim of claims) {
+      const { error: updateError } = await supabase
+        .from('reward_claims')
+        .update({
+          status: 'claimed',
+          tx_hash: claim.txHash,
+          claimed_at: claimedAt,
+        })
+        .eq('id', claim.rewardId)
+        .eq('wallet_address', walletAddress);
 
-    if (updateError) {
-      console.error('Failed to update claims:', updateError);
-      return NextResponse.json(
-        { error: 'INTERNAL_ERROR', message: 'Failed to process claims' },
-        { status: 500 }
-      );
+      if (updateError) {
+        console.error(`Failed to update claim ${claim.rewardId}:`, updateError);
+        failCount++;
+      } else {
+        successCount++;
+      }
     }
 
     // Also update winners table
-    const quizIds = [...new Set(claims.map(c => c.quiz_id))];
-    for (const quizId of quizIds) {
-      await supabase
-        .from('winners')
-        .update({ tx_hash: mockTxHash })
-        .eq('quiz_id', quizId)
-        .eq('wallet_address', walletAddress);
+    const rewardIds = claims.map(c => c.rewardId);
+    const { data: rewardClaims } = await supabase
+      .from('reward_claims')
+      .select('quiz_id')
+      .in('id', rewardIds);
+
+    if (rewardClaims) {
+      const quizIds = [...new Set(rewardClaims.map(c => c.quiz_id))];
+      for (const quizId of quizIds) {
+        const claimForQuiz = claims.find(c => 
+          rewardClaims.some(rc => rc.quiz_id === quizId && rewardIds.includes(c.rewardId))
+        );
+        if (claimForQuiz) {
+          await supabase
+            .from('winners')
+            .update({ tx_hash: claimForQuiz.txHash })
+            .eq('quiz_id', quizId)
+            .eq('wallet_address', walletAddress);
+        }
+      }
     }
 
     return NextResponse.json({
       success: true,
-      txHash: mockTxHash,
-      claimedCount: claims.length,
-      totalAmount: totalAmount.toString(),
-      message: `Successfully claimed ${claims.length} rewards`,
+      claimedCount: successCount,
+      failedCount: failCount,
+      message: `Successfully updated ${successCount} claims`,
     });
   } catch (error) {
     console.error('Unexpected error in POST /api/rewards/claim-all:', error);

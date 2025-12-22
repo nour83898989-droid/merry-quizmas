@@ -1,5 +1,13 @@
 /**
- * POST /api/rewards/claim - Claim a single reward
+ * POST /api/rewards/claim - Update reward status after onchain claim
+ * 
+ * IMPORTANT: This route expects the frontend to have already executed
+ * the onchain transaction. It only updates the database with the real txHash.
+ * 
+ * For onchain claims, use:
+ * 1. Frontend calls claimRewardOnChain() from transactions.ts
+ * 2. Wait for tx confirmation
+ * 3. Call this API with the real txHash
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -11,20 +19,9 @@ export const dynamic = 'force-dynamic';
 
 interface ClaimRequest {
   rewardId: string;
-  amount: string;
+  txHash: string; // Real transaction hash from onchain claim
 }
 
-/**
- * POST /api/rewards/claim
- * Process a reward claim
- * 
- * Note: In production, this would:
- * 1. Verify the claim is valid
- * 2. Generate a signature for the smart contract
- * 3. Or directly send tokens from treasury wallet
- * 
- * For now, we simulate the claim and update the database
- */
 export async function POST(request: NextRequest) {
   try {
     // Authenticate user
@@ -38,11 +35,18 @@ export async function POST(request: NextRequest) {
 
     const walletAddress = authResult.user.address;
     const body: ClaimRequest = await request.json();
-    const { rewardId } = body;
+    const { rewardId, txHash } = body;
 
     if (!rewardId) {
       return NextResponse.json(
         { error: 'BAD_REQUEST', message: 'Reward ID required' },
+        { status: 400 }
+      );
+    }
+
+    if (!txHash || !txHash.startsWith('0x')) {
+      return NextResponse.json(
+        { error: 'BAD_REQUEST', message: 'Valid transaction hash required' },
         { status: 400 }
       );
     }
@@ -72,20 +76,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // In production, here you would:
-    // 1. Call smart contract to transfer tokens
-    // 2. Or use a treasury wallet to send tokens
-    // 3. Get the transaction hash
-    
-    // For now, we simulate with a mock tx hash
-    const mockTxHash = `0x${Date.now().toString(16)}${Math.random().toString(16).slice(2, 10)}`;
-
-    // Update claim status
+    // Update claim status with real txHash
     const { error: updateError } = await supabase
       .from('reward_claims')
       .update({
         status: 'claimed',
-        tx_hash: mockTxHash,
+        tx_hash: txHash,
         claimed_at: new Date().toISOString(),
       })
       .eq('id', rewardId);
@@ -101,13 +97,13 @@ export async function POST(request: NextRequest) {
     // Also update winners table if exists
     await supabase
       .from('winners')
-      .update({ tx_hash: mockTxHash })
+      .update({ tx_hash: txHash })
       .eq('quiz_id', claim.quiz_id)
       .eq('wallet_address', walletAddress);
 
     return NextResponse.json({
       success: true,
-      txHash: mockTxHash,
+      txHash,
       message: 'Reward claimed successfully',
     });
   } catch (error) {
