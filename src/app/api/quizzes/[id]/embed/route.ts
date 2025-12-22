@@ -39,7 +39,7 @@ export async function GET(
       title: 'Play Quiz',
       action: {
         type: 'launch_frame',
-        name: 'Quiz App',
+        name: 'Merry Quizmas',
         url: `${baseUrl}/quiz/${id}`,
         splashImageUrl: `${baseUrl}/splash.png`,
         splashBackgroundColor: '#0d0d0d',

@@ -13,18 +13,18 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Quiz App - Merry Quizmas! 🎄",
+  title: "Merry Quizmas 🎄",
   description: "Play holiday quizzes and win crypto rewards this Christmas season! Create and play quizzes, compete with friends on Farcaster and Base.",
   openGraph: {
-    title: "Quiz App - Merry Quizmas! 🎄",
+    title: "Merry Quizmas 🎄",
     description: "Play holiday quizzes and win crypto rewards this Christmas season!",
     type: "website",
-    images: ["/christmas-banner.svg"],
+    images: ["/og-image.png"],
   },
   other: {
     // Farcaster Mini App meta tags
     "fc:frame": "vNext",
-    "fc:frame:image": "https://quiz-app.vercel.app/christmas-banner.svg",
+    "fc:frame:image": "https://merry-quizmas.vercel.app/christmas-banner.png",
     "fc:frame:image:aspect_ratio": "1.91:1",
     "fc:frame:button:1": "🎄 Play Quiz",
     "fc:frame:button:1:action": "launch_frame",

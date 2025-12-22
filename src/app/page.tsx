@@ -170,7 +170,7 @@ export default function HomePage() {
               <CandyCane className="w-6 h-6" />
             </div>
             <p className="text-xs text-foreground-muted">
-              🎄 Happy Holidays from Quiz App Team 🎄
+              🎄 Happy Holidays from Merry Quizmas Team 🎄
             </p>
           </div>
         </div>

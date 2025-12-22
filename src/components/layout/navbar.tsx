@@ -157,7 +157,7 @@ export function Navbar() {
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
             <span className="text-2xl">🎄</span>
-            <span className="font-bold text-foreground hidden sm:block">Quiz App</span>
+            <span className="font-bold text-foreground hidden sm:block">Merry Quizmas</span>
           </Link>
 
           {/* Desktop Nav */}

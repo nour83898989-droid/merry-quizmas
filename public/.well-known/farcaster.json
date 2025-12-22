@@ -6,11 +6,11 @@
   },
   "frame": {
     "version": "1",
-    "name": "Quiz App",
-    "iconUrl": "https://quiz-app.vercel.app/icon.png",
-    "homeUrl": "https://quiz-app.vercel.app",
-    "splashImageUrl": "https://quiz-app.vercel.app/splash.png",
+    "name": "Merry Quizmas",
+    "iconUrl": "https://merry-quizmas.vercel.app/icon.png",
+    "homeUrl": "https://merry-quizmas.vercel.app",
+    "splashImageUrl": "https://merry-quizmas.vercel.app/splash.png",
     "splashBackgroundColor": "#0d0d0d",
-    "webhookUrl": "https://quiz-app.vercel.app/api/webhook"
+    "webhookUrl": "https://merry-quizmas.vercel.app/api/webhook"
   }
 }
