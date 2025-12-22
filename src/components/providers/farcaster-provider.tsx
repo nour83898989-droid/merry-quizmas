@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useState, createContext, useContext, type ReactNode } from 'react';
-import { WagmiProvider, createConfig, useAccount, useConnect } from 'wagmi';
+import { WagmiProvider, createConfig, http } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { farcasterMiniApp as miniAppConnector } from '@farcaster/miniapp-wagmi-connector';
+import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
 import { base, baseSepolia } from 'viem/chains';
-import { http } from 'viem';
+import { injected, coinbaseWallet } from 'wagmi/connectors';
 
 // Use testnet based on env
 const IS_TESTNET = process.env.NEXT_PUBLIC_USE_TESTNET === 'true';
@@ -13,15 +13,19 @@ const activeChain = IS_TESTNET ? baseSepolia : base;
 
 const queryClient = new QueryClient();
 
+// Create wagmi config with multiple connectors for cross-platform support
 const config = createConfig({
   chains: [base, baseSepolia],
   transports: {
     [base.id]: http(),
     [baseSepolia.id]: http(),
   },
-  connectors: [miniAppConnector()],
+  connectors: [
+    farcasterMiniApp(),
+    injected(),
+    coinbaseWallet({ appName: 'Merry Quizmas' }),
+  ],
   ssr: true,
-  multiInjectedProviderDiscovery: true,
 });
 
 interface FarcasterContextType {
@@ -49,41 +53,6 @@ export function useFarcaster() {
   return useContext(FarcasterContext);
 }
 
-function AutoConnect() {
-  const { isConnected } = useAccount();
-  const { connectors, connectAsync } = useConnect();
-
-  useEffect(() => {
-    let cancelled = false;
-    
-    (async () => {
-      if (isConnected) return;
-      
-      try {
-        const { sdk } = await import('@farcaster/miniapp-sdk');
-        const inMiniApp = await sdk.isInMiniApp().catch(() => false);
-        if (!inMiniApp) return;
-        
-        // Find the injected connector
-        const injectedConn = connectors.find(
-          (c) => c.id === 'injected' || c.name.toLowerCase().includes('injected')
-        ) || connectors[0];
-        
-        if (!injectedConn) return;
-        if (cancelled) return;
-        
-        await connectAsync({ connector: injectedConn });
-      } catch (e) {
-        console.log('AutoConnect failed:', e);
-      }
-    })();
-    
-    return () => { cancelled = true; };
-  }, [isConnected, connectors, connectAsync]);
-  
-  return null;
-}
-
 function FarcasterInitializer({ 
   children, 
   onReady 
@@ -105,7 +74,7 @@ function FarcasterInitializer({
         isInMiniApp = await sdk.isInMiniApp().catch(() => false);
         
         if (isInMiniApp) {
-          // Get user context - sdk.context is a Promise
+          // Get user context - sdk.context is a Promise in v0.2.x
           const ctx = await sdk.context;
           if (ctx?.user) {
             user = {
@@ -116,11 +85,12 @@ function FarcasterInitializer({
             };
           }
           
-          // Signal ready to Farcaster
+          // Signal ready to Farcaster - CRITICAL for mobile
           await sdk.actions.ready();
+          console.log('[Farcaster] SDK ready called, user:', user?.username);
         }
       } catch (e) {
-        console.log('Farcaster SDK init:', e);
+        console.log('[Farcaster] SDK init error:', e);
       }
       
       if (!cancelled) {
@@ -158,7 +128,6 @@ export function FarcasterProvider({ children }: { children: ReactNode }) {
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <AutoConnect />
         <FarcasterContext.Provider value={contextValue}>
           <FarcasterInitializer onReady={handleReady}>
             {children}
