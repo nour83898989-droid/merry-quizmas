@@ -13,7 +13,7 @@ interface LeaderboardEntry {
   wallet: string;
   username: string | null;
   completionTimeMs: number;
-  rewardAmount: string;
+  rewardAmount: number;
 }
 
 /**
