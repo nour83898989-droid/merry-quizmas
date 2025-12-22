@@ -184,16 +184,6 @@ export function Navbar() {
                 {/* Dropdown Menu */}
                 {dropdownOpen && (
                   <div className="absolute right-0 mt-2 w-48 py-2 bg-surface rounded-xl border border-foreground/10 shadow-xl z-50">
-                    <Link href="/profile" onClick={() => setDropdownOpen(false)}>
-                      <div className="px-4 py-2 text-sm text-foreground hover:bg-foreground/5 cursor-pointer">
-                        👤 Profile
-                      </div>
-                    </Link>
-                    <Link href="/claim" onClick={() => setDropdownOpen(false)}>
-                      <div className="px-4 py-2 text-sm text-foreground hover:bg-foreground/5 cursor-pointer">
-                        🎁 My Rewards
-                      </div>
-                    </Link>
                     {isAdmin && (
                       <Link href="/admin" onClick={() => setDropdownOpen(false)}>
                         <div className="px-4 py-2 text-sm text-foreground hover:bg-foreground/5 cursor-pointer">
@@ -201,7 +191,6 @@ export function Navbar() {
                         </div>
                       </Link>
                     )}
-                    <div className="border-t border-foreground/10 my-1" />
                     <button
                       onClick={handleDisconnect}
                       className="w-full px-4 py-2 text-sm text-left text-error hover:bg-error/5"
