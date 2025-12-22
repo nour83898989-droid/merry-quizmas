@@ -4,13 +4,36 @@
     "payload": "",
     "signature": ""
   },
-  "frame": {
+  "miniapp": {
     "version": "1",
     "name": "Merry Quizmas",
     "iconUrl": "https://merry-quizmas.vercel.app/icon.png",
     "homeUrl": "https://merry-quizmas.vercel.app",
+    "buttonTitle": "🎄 Play Quiz",
     "splashImageUrl": "https://merry-quizmas.vercel.app/splash.png",
     "splashBackgroundColor": "#0d0d0d",
+    "subtitle": "Holiday Quiz Game",
+    "description": "Play holiday quizzes and win crypto rewards this Christmas season! Create and play quizzes, compete with friends on Farcaster and Base.",
+    "primaryCategory": "games",
+    "tags": [
+      "quiz",
+      "game",
+      "christmas",
+      "rewards",
+      "blockchain"
+    ],
+    "requiredChains": [
+      "eip155:8453"
+    ],
+    "requiredCapabilities": [
+      "wallet.getEthereumProvider"
+    ],
+    "imageUrl": "https://merry-quizmas.vercel.app/icon.png",
+    "ogImageUrl": "https://merry-quizmas.vercel.app/og-image.png",
+    "heroImageUrl": "https://merry-quizmas.vercel.app/christmas-banner.png",
+    "screenshotUrls": [
+      "https://merry-quizmas.vercel.app/christmas-banner.png"
+    ],
     "webhookUrl": "https://merry-quizmas.vercel.app/api/webhook"
   }
 }

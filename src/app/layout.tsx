@@ -1,3 +1,4 @@
+import type React from "react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -12,24 +13,56 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "Merry Quizmas 🎄",
-  description: "Play holiday quizzes and win crypto rewards this Christmas season! Create and play quizzes, compete with friends on Farcaster and Base.",
-  openGraph: {
+const baseUrl = "https://merry-quizmas.vercel.app";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return {
     title: "Merry Quizmas 🎄",
-    description: "Play holiday quizzes and win crypto rewards this Christmas season!",
-    type: "website",
-    images: ["/og-image.png"],
-  },
-  other: {
-    // Farcaster Mini App meta tags
-    "fc:frame": "vNext",
-    "fc:frame:image": "https://merry-quizmas.vercel.app/christmas-banner.png",
-    "fc:frame:image:aspect_ratio": "1.91:1",
-    "fc:frame:button:1": "🎄 Play Quiz",
-    "fc:frame:button:1:action": "launch_frame",
-  },
-};
+    description: "Play holiday quizzes and win crypto rewards this Christmas season! Create and play quizzes, compete with friends on Farcaster and Base.",
+    icons: {
+      icon: `${baseUrl}/icon.png`,
+      apple: `${baseUrl}/icon.png`,
+    },
+    openGraph: {
+      title: "Merry Quizmas 🎄",
+      description: "Play holiday quizzes and win crypto rewards this Christmas season!",
+      url: baseUrl,
+      siteName: "Merry Quizmas",
+      images: [
+        {
+          url: `${baseUrl}/og-image.png`,
+          width: 1200,
+          height: 630,
+          alt: "Merry Quizmas - Holiday Quiz Game",
+        },
+      ],
+      locale: "en_US",
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: "Merry Quizmas 🎄",
+      description: "Play holiday quizzes and win crypto rewards this Christmas season!",
+      images: [`${baseUrl}/og-image.png`],
+    },
+    other: {
+      "fc:miniapp": JSON.stringify({
+        version: "next",
+        imageUrl: `${baseUrl}/christmas-banner.png`,
+        button: {
+          title: "🎄 Play Quiz",
+          action: {
+            type: "launch_frame",
+            name: "Merry Quizmas",
+            url: baseUrl,
+            splashImageUrl: `${baseUrl}/splash.png`,
+            splashBackgroundColor: "#0d0d0d",
+          },
+        },
+      }),
+    },
+  };
+}
 
 export default function RootLayout({
   children,
