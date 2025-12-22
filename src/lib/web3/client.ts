@@ -370,13 +370,10 @@ export async function waitForTransaction(txHash: string, maxAttempts = 30): Prom
   return false;
 }
 
-// Extend Window interface
+// Extend Window interface - use 'any' to avoid conflicts with wagmi/coinbase types
 declare global {
   interface Window {
-    ethereum?: {
-      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-      on?: (event: string, callback: (...args: unknown[]) => void) => void;
-      removeListener?: (event: string, callback: (...args: unknown[]) => void) => void;
-    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ethereum?: any;
   }
 }
