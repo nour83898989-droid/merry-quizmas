@@ -23,10 +23,10 @@ export async function GET(
   }
 
   const rewardPerWinner = quiz.winner_limit > 0 
-    ? (parseFloat(quiz.reward_amount) / quiz.winner_limit).toFixed(2)
+    ? (Number(quiz.reward_amount) / quiz.winner_limit).toFixed(2)
     : '0';
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://quiz-app.vercel.app';
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://merry-quizmas.vercel.app';
 
   // Return embed metadata for Farcaster frames
   const embedData = {
