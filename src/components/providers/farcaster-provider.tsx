@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, createContext, useContext, type ReactNode } from 'react';
-import { WagmiProvider, createConfig, http } from 'wagmi';
+import { WagmiProvider, createConfig, http, useConnect, useAccount } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
 import { base, baseSepolia } from 'viem/chains';
@@ -51,6 +51,28 @@ const FarcasterContext = createContext<FarcasterContextType>({
 
 export function useFarcaster() {
   return useContext(FarcasterContext);
+}
+
+// Auto-connect component that runs inside WagmiProvider
+function AutoConnectWallet() {
+  const { isConnected } = useAccount();
+  const { connect, connectors } = useConnect();
+  
+  useEffect(() => {
+    // Auto-connect to Farcaster wallet if not connected
+    if (!isConnected) {
+      const farcasterConnector = connectors.find(c => 
+        /farcaster/i.test(c.name) || /mini.?app/i.test(c.name)
+      );
+      
+      if (farcasterConnector) {
+        console.log('[Farcaster] Auto-connecting to wallet...');
+        connect({ connector: farcasterConnector });
+      }
+    }
+  }, [isConnected, connect, connectors]);
+  
+  return null;
 }
 
 function FarcasterInitializer({ 
@@ -129,6 +151,7 @@ export function FarcasterProvider({ children }: { children: ReactNode }) {
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <FarcasterContext.Provider value={contextValue}>
+          <AutoConnectWallet />
           <FarcasterInitializer onReady={handleReady}>
             {children}
           </FarcasterInitializer>
