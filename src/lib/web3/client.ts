@@ -323,9 +323,8 @@ export async function getAllTokenBalances(walletAddress: string): Promise<TokenB
     return [];
   }
 
-  const balances: TokenBalance[] = [];
-
-  for (const token of SUPPORTED_TOKENS) {
+  // Fetch all balances in parallel for better performance
+  const balancePromises = SUPPORTED_TOKENS.map(async (token) => {
     try {
       let balance: string;
       
@@ -337,28 +336,28 @@ export async function getAllTokenBalances(walletAddress: string): Promise<TokenB
 
       const formattedBalance = formatTokenBalance(balance, token.decimals);
 
-      balances.push({
+      return {
         symbol: token.symbol,
         name: token.name,
         address: token.address,
         balance,
         decimals: token.decimals,
         formattedBalance,
-      });
+      };
     } catch (error) {
       console.error(`Failed to get balance for ${token.symbol}:`, error);
-      balances.push({
+      return {
         symbol: token.symbol,
         name: token.name,
         address: token.address,
         balance: '0',
         decimals: token.decimals,
         formattedBalance: '0',
-      });
+      };
     }
-  }
+  });
 
-  return balances;
+  return Promise.all(balancePromises);
 }
 
 /**

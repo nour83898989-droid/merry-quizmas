@@ -28,10 +28,14 @@ export function Navbar() {
     }
   }, [isConnected]);
 
-  // Check admin status when address or farcasterUser changes
+  // Check admin status when address or farcasterUser changes (with debounce)
   useEffect(() => {
     if (address || farcasterUser?.fid) {
-      checkAdminStatus(address, farcasterUser?.fid);
+      // Small delay to avoid multiple rapid calls
+      const timer = setTimeout(() => {
+        checkAdminStatus(address, farcasterUser?.fid);
+      }, 100);
+      return () => clearTimeout(timer);
     } else {
       setIsAdmin(false);
     }

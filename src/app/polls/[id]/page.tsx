@@ -2,9 +2,11 @@
 
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAccount } from 'wagmi';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ChristmasLayout } from '@/components/christmas/christmas-layout';
+import { useFarcaster } from '@/components/providers/farcaster-provider';
 
 interface PollOption {
   index: number;
@@ -32,6 +34,8 @@ export default function PollDetailPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
+  const { address, isConnected } = useAccount();
+  const { user: farcasterUser } = useFarcaster();
   const [poll, setPoll] = useState<Poll | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedOptions, setSelectedOptions] = useState<number[]>([]);
@@ -39,10 +43,20 @@ export default function PollDetailPage({
   const [votedOptions, setVotedOptions] = useState<number[]>([]);
   const [isVoting, setIsVoting] = useState(false);
 
+  // Get voter identifier (FID or wallet address)
+  const voterFid = farcasterUser?.fid || null;
+  const voterWallet = address || null;
+
   useEffect(() => {
     fetchPoll();
-    checkVoteStatus();
   }, [id]);
+
+  // Check vote status when wallet/fid changes
+  useEffect(() => {
+    if (voterFid || voterWallet) {
+      checkVoteStatus();
+    }
+  }, [id, voterFid, voterWallet]);
 
   async function fetchPoll() {
     try {
@@ -59,13 +73,18 @@ export default function PollDetailPage({
 
   async function checkVoteStatus() {
     try {
-      // TODO: Get actual FID from wallet/auth
-      const voterFid = 1;
-      const res = await fetch(`/api/polls/${id}/vote?voter_fid=${voterFid}`);
+      // Build query params based on available identifiers
+      const params = new URLSearchParams();
+      if (voterFid) params.append('voter_fid', voterFid.toString());
+      if (voterWallet) params.append('voter_wallet', voterWallet);
+      
+      if (params.toString() === '') return;
+      
+      const res = await fetch(`/api/polls/${id}/vote?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setHasVoted(data.hasVoted);
-        setVotedOptions(data.votedOptions);
+        setVotedOptions(data.votedOptions || []);
       }
     } catch (error) {
       console.error('Error checking vote status:', error);
@@ -88,17 +107,25 @@ export default function PollDetailPage({
 
   const handleVote = async () => {
     if (selectedOptions.length === 0 || !poll) return;
+    
+    // Require some form of identification
+    if (!voterFid && !voterWallet) {
+      alert('Please connect your wallet to vote');
+      return;
+    }
 
     setIsVoting(true);
     try {
-      // TODO: Get actual FID from wallet/auth
-      const voterFid = 1;
-
       const res = await fetch(`/api/polls/${id}/vote`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(voterWallet ? { 'x-wallet-address': voterWallet } : {}),
+          ...(voterFid ? { 'x-fid': voterFid.toString() } : {}),
+        },
         body: JSON.stringify({
           voterFid,
+          voterWallet,
           optionIndexes: selectedOptions,
         }),
       });
@@ -192,6 +219,16 @@ export default function PollDetailPage({
         </header>
 
         <div className="p-4 space-y-4">
+          {/* Wallet Connection Warning */}
+          {!isConnected && (
+            <Card className="bg-warning/10 border-warning/20">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">⚠️</span>
+                <p className="text-sm text-foreground">Connect wallet to vote</p>
+              </div>
+            </Card>
+          )}
+
           {/* Poll Info */}
           <Card className="christmas-card">
             <h2 className="text-xl font-bold text-foreground mb-2">{poll.title}</h2>
@@ -227,12 +264,12 @@ export default function PollDetailPage({
                   <button
                     key={option.index}
                     onClick={() => toggleOption(option.index)}
-                    disabled={hasVoted || isEnded}
+                    disabled={hasVoted || isEnded || !isConnected}
                     className={`w-full relative rounded-xl overflow-hidden transition-all ${
                       isSelected || wasVoted
                         ? 'ring-2 ring-primary'
                         : 'hover:ring-1 hover:ring-foreground/20'
-                    } ${hasVoted || isEnded ? 'cursor-default' : 'cursor-pointer'}`}
+                    } ${hasVoted || isEnded || !isConnected ? 'cursor-default' : 'cursor-pointer'}`}
                   >
                     {showResults && (
                       <div
@@ -290,12 +327,12 @@ export default function PollDetailPage({
           <div className="fixed bottom-0 left-0 right-0 p-4 bg-background border-t border-foreground/10">
             <Button
               onClick={handleVote}
-              disabled={selectedOptions.length === 0 || isVoting}
+              disabled={selectedOptions.length === 0 || isVoting || !isConnected}
               isLoading={isVoting}
               fullWidth
               className="christmas-gradient text-white"
             >
-              Vote ({selectedOptions.length} selected)
+              {!isConnected ? 'Connect Wallet to Vote' : `Vote (${selectedOptions.length} selected)`}
             </Button>
           </div>
         )}

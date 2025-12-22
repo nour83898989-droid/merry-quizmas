@@ -6,6 +6,7 @@ import { useAccount } from 'wagmi';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { searchUsersByUsername } from '@/lib/neynar/client';
 
 interface AdminStats {
   totalQuizzes: number;
@@ -41,10 +42,13 @@ export default function AdminPage() {
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [banAddress, setBanAddress] = useState('');
+  const [banInput, setBanInput] = useState('');
+  const [unbanInput, setUnbanInput] = useState('');
   const [newAdminInput, setNewAdminInput] = useState('');
-  const [addByFid, setAddByFid] = useState(false);
+  const [inputType, setInputType] = useState<'wallet' | 'fid' | 'username'>('wallet');
   const [activeTab, setActiveTab] = useState<'overview' | 'quizzes' | 'users' | 'admins'>('overview');
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupResult, setLookupResult] = useState<string | null>(null);
 
   const fetchAdminData = useCallback(async (wallet: string) => {
     try {
@@ -97,8 +101,10 @@ export default function AdminPage() {
       const result = await res.json();
       if (result.success) {
         fetchAdminData(address);
-        setBanAddress('');
+        setBanInput('');
+        setUnbanInput('');
         setNewAdminInput('');
+        setLookupResult(null);
       } else {
         alert(result.message || 'Action failed');
       }
@@ -219,36 +225,122 @@ export default function AdminPage() {
         {/* Users Tab */}
         {activeTab === 'users' && (
           <Card>
-            <h3 className="text-lg font-semibold text-foreground mb-4">Ban User</h3>
-            <div className="flex gap-2">
-              <Input
-                value={banAddress}
-                onChange={e => setBanAddress(e.target.value)}
-                placeholder="Wallet address to ban"
-                className="flex-1"
-              />
-              <Button
-                onClick={() => handleAction('ban_user', { walletAddress: banAddress, reason: 'Admin action' })}
-                disabled={!banAddress || actionLoading === 'ban_user'}
+            <h3 className="text-lg font-semibold text-foreground mb-4">Ban/Unban User</h3>
+            
+            {/* Toggle between Wallet, FID, and Username */}
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => { setInputType('wallet'); setLookupResult(null); }}
+                className={`px-3 py-1 rounded-lg text-sm ${inputType === 'wallet' ? 'bg-primary text-white' : 'bg-surface text-foreground-muted'}`}
               >
-                Ban User
-              </Button>
-            </div>
-            <div className="mt-4">
-              <Input
-                value={banAddress}
-                onChange={e => setBanAddress(e.target.value)}
-                placeholder="Wallet address to unban"
-                className="flex-1 mb-2"
-              />
-              <Button
-                variant="outline"
-                onClick={() => handleAction('unban_user', { walletAddress: banAddress })}
-                disabled={!banAddress || actionLoading === 'unban_user'}
+                By Wallet
+              </button>
+              <button
+                onClick={() => { setInputType('fid'); setLookupResult(null); }}
+                className={`px-3 py-1 rounded-lg text-sm ${inputType === 'fid' ? 'bg-primary text-white' : 'bg-surface text-foreground-muted'}`}
               >
-                Unban User
-              </Button>
+                By FID
+              </button>
+              <button
+                onClick={() => { setInputType('username'); setLookupResult(null); }}
+                className={`px-3 py-1 rounded-lg text-sm ${inputType === 'username' ? 'bg-primary text-white' : 'bg-surface text-foreground-muted'}`}
+              >
+                By Username
+              </button>
             </div>
+
+            {lookupResult && (
+              <div className="mb-4 p-2 bg-success/10 text-success rounded-lg text-sm">
+                ✓ Found: {lookupResult}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              {/* Ban User */}
+              <div>
+                <label className="block text-sm text-foreground-muted mb-2">Ban User</label>
+                <div className="flex gap-2">
+                  <Input
+                    value={banInput}
+                    onChange={e => setBanInput(e.target.value)}
+                    placeholder={
+                      inputType === 'fid' ? "Farcaster FID (e.g. 12345)" : 
+                      inputType === 'username' ? "Username (e.g. vitalik)" :
+                      "Wallet address (0x...)"
+                    }
+                    className="flex-1"
+                    type={inputType === 'fid' ? "number" : "text"}
+                  />
+                  <Button
+                    onClick={async () => {
+                      if (inputType === 'username') {
+                        setLookupLoading(true);
+                        const users = await searchUsersByUsername(banInput, 1);
+                        setLookupLoading(false);
+                        if (users.length > 0) {
+                          setLookupResult(`@${users[0].username} (FID: ${users[0].fid})`);
+                          handleAction('ban_user', { fid: users[0].fid, reason: 'Admin action' });
+                        } else {
+                          alert('Username not found');
+                        }
+                      } else if (inputType === 'fid') {
+                        handleAction('ban_user', { fid: parseInt(banInput), reason: 'Admin action' });
+                      } else {
+                        handleAction('ban_user', { walletAddress: banInput, reason: 'Admin action' });
+                      }
+                    }}
+                    disabled={!banInput || actionLoading === 'ban_user' || lookupLoading}
+                  >
+                    {lookupLoading ? '...' : 'Ban User'}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Unban User */}
+              <div>
+                <label className="block text-sm text-foreground-muted mb-2">Unban User</label>
+                <div className="flex gap-2">
+                  <Input
+                    value={unbanInput}
+                    onChange={e => setUnbanInput(e.target.value)}
+                    placeholder={
+                      inputType === 'fid' ? "Farcaster FID (e.g. 12345)" : 
+                      inputType === 'username' ? "Username (e.g. vitalik)" :
+                      "Wallet address (0x...)"
+                    }
+                    className="flex-1"
+                    type={inputType === 'fid' ? "number" : "text"}
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      if (inputType === 'username') {
+                        setLookupLoading(true);
+                        const users = await searchUsersByUsername(unbanInput, 1);
+                        setLookupLoading(false);
+                        if (users.length > 0) {
+                          setLookupResult(`@${users[0].username} (FID: ${users[0].fid})`);
+                          handleAction('unban_user', { fid: users[0].fid });
+                        } else {
+                          alert('Username not found');
+                        }
+                      } else if (inputType === 'fid') {
+                        handleAction('unban_user', { fid: parseInt(unbanInput) });
+                      } else {
+                        handleAction('unban_user', { walletAddress: unbanInput });
+                      }
+                    }}
+                    disabled={!unbanInput || actionLoading === 'unban_user' || lookupLoading}
+                  >
+                    {lookupLoading ? '...' : 'Unban User'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-sm text-foreground-muted mt-4">
+              💡 Tip: You can ban/unban users by wallet address, Farcaster FID, or username
+            </p>
           </Card>
         )}
 
@@ -257,51 +349,89 @@ export default function AdminPage() {
           <Card>
             <h3 className="text-lg font-semibold text-foreground mb-4">Manage Admins</h3>
             
-            {/* Toggle between Wallet and FID */}
+            {/* Toggle between Wallet, FID, and Username */}
             <div className="flex gap-2 mb-4">
               <button
-                onClick={() => setAddByFid(false)}
-                className={`px-3 py-1 rounded-lg text-sm ${!addByFid ? 'bg-primary text-white' : 'bg-surface text-foreground-muted'}`}
+                onClick={() => { setInputType('wallet'); setLookupResult(null); }}
+                className={`px-3 py-1 rounded-lg text-sm ${inputType === 'wallet' ? 'bg-primary text-white' : 'bg-surface text-foreground-muted'}`}
               >
                 By Wallet
               </button>
               <button
-                onClick={() => setAddByFid(true)}
-                className={`px-3 py-1 rounded-lg text-sm ${addByFid ? 'bg-primary text-white' : 'bg-surface text-foreground-muted'}`}
+                onClick={() => { setInputType('fid'); setLookupResult(null); }}
+                className={`px-3 py-1 rounded-lg text-sm ${inputType === 'fid' ? 'bg-primary text-white' : 'bg-surface text-foreground-muted'}`}
               >
                 By FID
               </button>
+              <button
+                onClick={() => { setInputType('username'); setLookupResult(null); }}
+                className={`px-3 py-1 rounded-lg text-sm ${inputType === 'username' ? 'bg-primary text-white' : 'bg-surface text-foreground-muted'}`}
+              >
+                By Username
+              </button>
             </div>
+
+            {lookupResult && (
+              <div className="mb-4 p-2 bg-success/10 text-success rounded-lg text-sm">
+                ✓ Found: {lookupResult}
+              </div>
+            )}
 
             <div className="flex gap-2 mb-4">
               <Input
                 value={newAdminInput}
                 onChange={e => setNewAdminInput(e.target.value)}
-                placeholder={addByFid ? "Farcaster FID (e.g. 12345)" : "Wallet address (0x...)"}
+                placeholder={
+                  inputType === 'fid' ? "Farcaster FID (e.g. 12345)" : 
+                  inputType === 'username' ? "Username (e.g. vitalik)" :
+                  "Wallet address (0x...)"
+                }
                 className="flex-1"
-                type={addByFid ? "number" : "text"}
+                type={inputType === 'fid' ? "number" : "text"}
               />
               <Button
-                onClick={() => {
-                  const data = addByFid 
-                    ? { fid: parseInt(newAdminInput), role: 'moderator' }
-                    : { walletAddress: newAdminInput, role: 'moderator' };
-                  handleAction('add_admin', data);
+                onClick={async () => {
+                  if (inputType === 'username') {
+                    setLookupLoading(true);
+                    const users = await searchUsersByUsername(newAdminInput, 1);
+                    setLookupLoading(false);
+                    if (users.length > 0) {
+                      setLookupResult(`@${users[0].username} (FID: ${users[0].fid})`);
+                      handleAction('add_admin', { fid: users[0].fid, role: 'moderator' });
+                    } else {
+                      alert('Username not found');
+                    }
+                  } else if (inputType === 'fid') {
+                    handleAction('add_admin', { fid: parseInt(newAdminInput), role: 'moderator' });
+                  } else {
+                    handleAction('add_admin', { walletAddress: newAdminInput, role: 'moderator' });
+                  }
                 }}
-                disabled={!newAdminInput || actionLoading === 'add_admin'}
+                disabled={!newAdminInput || actionLoading === 'add_admin' || lookupLoading}
               >
-                + Moderator
+                {lookupLoading ? '...' : '+ Moderator'}
               </Button>
               <Button
-                onClick={() => {
-                  const data = addByFid 
-                    ? { fid: parseInt(newAdminInput), role: 'admin' }
-                    : { walletAddress: newAdminInput, role: 'admin' };
-                  handleAction('add_admin', data);
+                onClick={async () => {
+                  if (inputType === 'username') {
+                    setLookupLoading(true);
+                    const users = await searchUsersByUsername(newAdminInput, 1);
+                    setLookupLoading(false);
+                    if (users.length > 0) {
+                      setLookupResult(`@${users[0].username} (FID: ${users[0].fid})`);
+                      handleAction('add_admin', { fid: users[0].fid, role: 'admin' });
+                    } else {
+                      alert('Username not found');
+                    }
+                  } else if (inputType === 'fid') {
+                    handleAction('add_admin', { fid: parseInt(newAdminInput), role: 'admin' });
+                  } else {
+                    handleAction('add_admin', { walletAddress: newAdminInput, role: 'admin' });
+                  }
                 }}
-                disabled={!newAdminInput || actionLoading === 'add_admin'}
+                disabled={!newAdminInput || actionLoading === 'add_admin' || lookupLoading}
               >
-                + Admin
+                {lookupLoading ? '...' : '+ Admin'}
               </Button>
             </div>
 
@@ -350,7 +480,7 @@ export default function AdminPage() {
             </div>
 
             <p className="text-sm text-foreground-muted mt-4">
-              💡 Tip: You can add admins by wallet address OR Farcaster FID
+              💡 Tip: You can add admins by wallet address, Farcaster FID, or username
             </p>
           </Card>
         )}

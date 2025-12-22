@@ -76,8 +76,8 @@ export { farcasterMiniApp };
 
 // Auto-connect component - waits for isReady before attempting
 function AutoConnectWallet({ isReady, isInMiniApp }: { isReady: boolean; isInMiniApp: boolean }) {
-  const { isConnected } = useAccount();
-  const { connect, connectors } = useConnect();
+  const { isConnected, address } = useAccount();
+  const { connect, connectors, status } = useConnect();
   const [attempted, setAttempted] = useState(false);
   
   useEffect(() => {
@@ -86,12 +86,35 @@ function AutoConnectWallet({ isReady, isInMiniApp }: { isReady: boolean; isInMin
     // 2. In mini app
     // 3. Not already connected
     // 4. Haven't attempted yet
-    if (isReady && isInMiniApp && !isConnected && !attempted && connectors.length > 0) {
+    // 5. Not currently connecting
+    if (isReady && isInMiniApp && !isConnected && !attempted && connectors.length > 0 && status !== 'pending') {
       setAttempted(true);
-      console.log('[Farcaster] Auto-connecting with connector:', connectors[0]?.name);
-      connect({ connector: connectors[0] });
+      const farcasterConnector = connectors[0]; // farcasterMiniApp is first
+      console.log('[Farcaster] Auto-connecting with connector:', farcasterConnector?.name);
+      
+      // Use async connect with error handling
+      connect(
+        { connector: farcasterConnector },
+        {
+          onSuccess: (data) => {
+            console.log('[Farcaster] Auto-connect success:', data.accounts?.[0]);
+          },
+          onError: (error) => {
+            console.error('[Farcaster] Auto-connect failed:', error);
+            // Reset attempted to allow retry on next render
+            setAttempted(false);
+          },
+        }
+      );
     }
-  }, [isReady, isInMiniApp, isConnected, attempted, connect, connectors]);
+  }, [isReady, isInMiniApp, isConnected, attempted, connect, connectors, status]);
+  
+  // Log connection status for debugging
+  useEffect(() => {
+    if (isConnected && address) {
+      console.log('[Farcaster] Wallet connected:', address);
+    }
+  }, [isConnected, address]);
   
   return null;
 }

@@ -59,10 +59,28 @@ export default function QuizPlayPage({ params }: { params: Promise<{ id: string 
   const [error, setError] = useState<string | null>(null);
 
   const fetchSession = useCallback(async () => {
-    // Session should already be created from quiz detail page
-    // This is a fallback that shouldn't normally be called
+    // Try to fetch session info from API as fallback
+    try {
+      const walletAddress = sessionStorage.getItem('wallet-address') || '';
+      const res = await fetch(`/api/attempts/${sessionId}`, {
+        headers: {
+          'x-wallet-address': walletAddress,
+        },
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (data.session) {
+          setSession(data.session);
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch session:', err);
+    }
+    
     setError('Session not found. Please start the quiz from the quiz detail page.');
-  }, []);
+  }, [sessionId]);
 
   // Fetch session data
   useEffect(() => {
@@ -72,10 +90,14 @@ export default function QuizPlayPage({ params }: { params: Promise<{ id: string 
     }
 
     // Session data should be passed from the start endpoint
-    // For now, we'll simulate it with localStorage or refetch
     const storedSession = sessionStorage.getItem(`quiz-session-${sessionId}`);
     if (storedSession) {
-      setSession(JSON.parse(storedSession));
+      try {
+        setSession(JSON.parse(storedSession));
+      } catch (e) {
+        console.error('Failed to parse session:', e);
+        fetchSession();
+      }
     } else {
       // Fallback: fetch from API
       fetchSession();
@@ -192,9 +214,9 @@ export default function QuizPlayPage({ params }: { params: Promise<{ id: string 
   if (error) {
     return (
       <main className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="text-center">
+        <div className="text-center max-w-sm">
           <p className="text-error mb-4">{error}</p>
-          <Button onClick={() => router.push('/quizzes')}>Back to Quizzes</Button>
+          <Button onClick={() => router.push(`/quiz/${id}`)}>Back to Quiz</Button>
         </div>
       </main>
     );

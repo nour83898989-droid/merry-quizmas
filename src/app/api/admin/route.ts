@@ -9,6 +9,23 @@ import { createServerClient } from '@/lib/supabase/client';
 
 export const dynamic = 'force-dynamic';
 
+const NEYNAR_API_KEY = process.env.NEYNAR_API_KEY || process.env.NEXT_PUBLIC_NEYNAR_API_KEY || 'NEYNAR_API_DOCS';
+
+// Lookup wallet address from FID using Neynar
+async function getWalletFromFid(fid: number): Promise<string | null> {
+  try {
+    const response = await fetch(`https://api.neynar.com/v2/farcaster/user/bulk?fids=${fid}`, {
+      headers: { 'accept': 'application/json', 'api_key': NEYNAR_API_KEY }
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const user = data?.users?.[0];
+    return user?.verified_addresses?.eth_addresses?.[0] || user?.custody_address || null;
+  } catch {
+    return null;
+  }
+}
+
 // Check if wallet or FID is admin
 async function isAdmin(walletAddress?: string, fid?: number): Promise<{ isAdmin: boolean; role: string | null }> {
   const supabase = createServerClient();
@@ -157,31 +174,55 @@ export async function POST(request: NextRequest) {
       }
 
       case 'ban_user': {
-        if (!body.walletAddress) {
-          return NextResponse.json({ error: 'BAD_REQUEST', message: 'walletAddress required' }, { status: 400 });
+        // Support banning by wallet OR FID
+        if (!body.walletAddress && !body.fid) {
+          return NextResponse.json({ error: 'BAD_REQUEST', message: 'walletAddress or fid required' }, { status: 400 });
         }
+
+        // If FID provided, lookup wallet address
+        let walletToBan: string | undefined = body.walletAddress?.toLowerCase();
+        if (!walletToBan && body.fid) {
+          const foundWallet = await getWalletFromFid(body.fid);
+          if (!foundWallet) {
+            return NextResponse.json({ error: 'NOT_FOUND', message: 'Could not find wallet for FID' }, { status: 404 });
+          }
+          walletToBan = foundWallet;
+        }
+
+        const banData = {
+          wallet_address: walletToBan!,
+          reason: body.reason || 'Violation of terms',
+          banned_by: adminWallet || `fid:${adminFid}`,
+        };
 
         const { error } = await supabase
           .from('banned_users')
-          .upsert({
-            wallet_address: body.walletAddress.toLowerCase(),
-            reason: body.reason || 'Violation of terms',
-            banned_by: adminWallet || `fid:${adminFid}`,
-          });
+          .upsert(banData);
 
         if (error) throw error;
         return NextResponse.json({ success: true, message: 'User banned' });
       }
 
       case 'unban_user': {
-        if (!body.walletAddress) {
-          return NextResponse.json({ error: 'BAD_REQUEST', message: 'walletAddress required' }, { status: 400 });
+        // Support unbanning by wallet OR FID
+        if (!body.walletAddress && !body.fid) {
+          return NextResponse.json({ error: 'BAD_REQUEST', message: 'walletAddress or fid required' }, { status: 400 });
+        }
+
+        // If FID provided, lookup wallet address
+        let walletToUnban: string | undefined = body.walletAddress?.toLowerCase();
+        if (!walletToUnban && body.fid) {
+          const foundWallet = await getWalletFromFid(body.fid);
+          if (!foundWallet) {
+            return NextResponse.json({ error: 'NOT_FOUND', message: 'Could not find wallet for FID' }, { status: 404 });
+          }
+          walletToUnban = foundWallet;
         }
 
         const { error } = await supabase
           .from('banned_users')
           .delete()
-          .eq('wallet_address', body.walletAddress.toLowerCase());
+          .eq('wallet_address', walletToUnban!);
 
         if (error) throw error;
         return NextResponse.json({ success: true, message: 'User unbanned' });

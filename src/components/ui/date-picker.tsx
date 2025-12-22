@@ -180,108 +180,121 @@ export function DatePicker({
         <CalendarIcon className="w-5 h-5 text-foreground-muted" />
       </button>
 
-      {/* Calendar Popup - smart positioning based on viewport space */}
+      {/* Calendar Popup - mobile-friendly with fixed positioning on small screens */}
       {isOpen && (
-        <div 
-          className={`absolute z-50 w-80 p-4 rounded-xl border border-foreground/10 bg-surface shadow-xl ${
-            openAbove ? 'bottom-full mb-2' : 'top-full mt-2'
-          }`}
-        >
-          {/* Month Navigation */}
-          <div className="flex items-center justify-between mb-4">
-            <button
-              type="button"
-              onClick={prevMonth}
-              className="p-2 rounded-lg hover:bg-foreground/5 transition-colors"
-            >
-              <ChevronLeftIcon className="w-5 h-5 text-foreground" />
-            </button>
-            <span className="font-medium text-foreground">
-              {monthNames[viewDate.getMonth()]} {viewDate.getFullYear()}
-            </span>
-            <button
-              type="button"
-              onClick={nextMonth}
-              className="p-2 rounded-lg hover:bg-foreground/5 transition-colors"
-            >
-              <ChevronRightIcon className="w-5 h-5 text-foreground" />
-            </button>
-          </div>
+        <>
+          {/* Mobile overlay */}
+          <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setIsOpen(false)} />
+          
+          <div 
+            className={`
+              fixed md:absolute z-50 
+              left-1/2 -translate-x-1/2 md:left-0 md:translate-x-0
+              w-[calc(100vw-2rem)] md:w-80 max-w-80
+              p-4 rounded-xl border border-foreground/10 bg-surface shadow-xl
+              ${openAbove 
+                ? 'md:bottom-full md:mb-2 bottom-4' 
+                : 'md:top-full md:mt-2 top-1/2 md:top-auto -translate-y-1/2 md:translate-y-0'
+              }
+              max-h-[80vh] overflow-y-auto
+            `}
+          >
+            {/* Month Navigation */}
+            <div className="flex items-center justify-between mb-4">
+              <button
+                type="button"
+                onClick={prevMonth}
+                className="p-2 rounded-lg hover:bg-foreground/5 transition-colors"
+              >
+                <ChevronLeftIcon className="w-5 h-5 text-foreground" />
+              </button>
+              <span className="font-medium text-foreground">
+                {monthNames[viewDate.getMonth()]} {viewDate.getFullYear()}
+              </span>
+              <button
+                type="button"
+                onClick={nextMonth}
+                className="p-2 rounded-lg hover:bg-foreground/5 transition-colors"
+              >
+                <ChevronRightIcon className="w-5 h-5 text-foreground" />
+              </button>
+            </div>
 
-          {/* Day Names */}
-          <div className="grid grid-cols-7 gap-1 mb-2">
-            {dayNames.map(day => (
-              <div key={day} className="text-center text-xs text-foreground-muted py-1">
-                {day}
-              </div>
-            ))}
-          </div>
-
-          {/* Calendar Grid */}
-          <div className="grid grid-cols-7 gap-1">
-            {/* Empty cells for days before first of month */}
-            {Array.from({ length: firstDayOfMonth }).map((_, i) => (
-              <div key={`empty-${i}`} className="h-9" />
-            ))}
-            
-            {/* Days */}
-            {Array.from({ length: daysInMonth }).map((_, i) => {
-              const day = i + 1;
-              const disabled = isDateDisabled(day);
-              const today = isToday(day);
-              const selected = isSelected(day);
-
-              return (
-                <button
-                  key={day}
-                  type="button"
-                  onClick={() => !disabled && handleDateSelect(day)}
-                  disabled={disabled}
-                  className={`h-9 rounded-lg text-sm font-medium transition-colors ${
-                    disabled
-                      ? 'text-foreground/20 cursor-not-allowed'
-                      : selected
-                      ? 'bg-primary text-white'
-                      : today
-                      ? 'bg-primary/20 text-primary hover:bg-primary/30'
-                      : 'text-foreground hover:bg-foreground/5'
-                  }`}
-                >
+            {/* Day Names */}
+            <div className="grid grid-cols-7 gap-1 mb-2">
+              {dayNames.map(day => (
+                <div key={day} className="text-center text-xs text-foreground-muted py-1">
                   {day}
-                </button>
-              );
-            })}
-          </div>
+                </div>
+              ))}
+            </div>
 
-          {/* Time Picker */}
-          <div className="mt-4 pt-4 border-t border-foreground/10">
-            <label className="block text-sm text-foreground-muted mb-2">Time</label>
-            <input
-              type="time"
-              value={selectedTime}
-              onChange={(e) => handleTimeChange(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-background border border-foreground/10 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-            />
-          </div>
+            {/* Calendar Grid */}
+            <div className="grid grid-cols-7 gap-1">
+              {/* Empty cells for days before first of month */}
+              {Array.from({ length: firstDayOfMonth }).map((_, i) => (
+                <div key={`empty-${i}`} className="h-9" />
+              ))}
+              
+              {/* Days */}
+              {Array.from({ length: daysInMonth }).map((_, i) => {
+                const day = i + 1;
+                const disabled = isDateDisabled(day);
+                const today = isToday(day);
+                const selected = isSelected(day);
 
-          {/* Actions */}
-          <div className="mt-4 flex gap-2">
-            <button
-              type="button"
-              onClick={handleClear}
-              className="flex-1 px-3 py-2 rounded-lg border border-foreground/10 text-foreground-muted hover:bg-foreground/5 transition-colors text-sm"
-            >
-              Clear
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsOpen(false)}
-              className="flex-1 px-3 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors text-sm"
-            >
-              Done
-            </button>
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => !disabled && handleDateSelect(day)}
+                    disabled={disabled}
+                    className={`h-9 rounded-lg text-sm font-medium transition-colors ${
+                      disabled
+                        ? 'text-foreground/20 cursor-not-allowed'
+                        : selected
+                        ? 'bg-primary text-white'
+                        : today
+                        ? 'bg-primary/20 text-primary hover:bg-primary/30'
+                        : 'text-foreground hover:bg-foreground/5'
+                    }`}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Time Picker */}
+            <div className="mt-4 pt-4 border-t border-foreground/10">
+              <label className="block text-sm text-foreground-muted mb-2">Time</label>
+              <input
+                type="time"
+                value={selectedTime}
+                onChange={(e) => handleTimeChange(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-background border border-foreground/10 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={handleClear}
+                className="flex-1 px-3 py-2 rounded-lg border border-foreground/10 text-foreground-muted hover:bg-foreground/5 transition-colors text-sm"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="flex-1 px-3 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors text-sm"
+              >
+                Done
+              </button>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

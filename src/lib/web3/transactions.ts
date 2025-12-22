@@ -13,10 +13,10 @@ const APPROVE_SELECTOR = '0x095ea7b3'; // approve(address,uint256)
 const ALLOWANCE_SELECTOR = '0xdd62ed3e'; // allowance(address,address)
 
 // QuizRewardPool function selectors (calculated with cast sig)
-const CREATE_QUIZ_SELECTOR = '0x8f6b0a5a'; // createQuiz(bytes32,address,uint256,address,uint256,address,uint256)
+const CREATE_QUIZ_SELECTOR = '0xb69059da'; // createQuiz(bytes32,address,uint256,address,uint256,address,uint256)
 const JOIN_QUIZ_SELECTOR = '0x694d3d38'; // joinQuiz(bytes32)
 const CLAIM_REWARD_SELECTOR = '0xf5414023'; // claimReward(bytes32)
-const RETURN_STAKE_SELECTOR = '0x5c19a95c'; // returnStake(bytes32)
+const RETURN_STAKE_SELECTOR = '0x3ba170c0'; // returnStake(bytes32)
 const GET_CLAIMABLE_SELECTOR = '0xd16a7c54'; // getClaimableReward(bytes32,address)
 const HAS_JOINED_SELECTOR = '0x02cc90c7'; // hasJoined(bytes32,address)
 
@@ -33,17 +33,44 @@ async function getWalletProvider(): Promise<{ request: (args: { method: string; 
   // Try wagmi wallet client first (works in Farcaster mini app)
   try {
     const walletClient = await getWalletClient(wagmiConfig);
+    const publicClient = getPublicClient(wagmiConfig);
+    
     if (walletClient) {
       return {
         request: async ({ method, params }) => {
           // Map common methods to viem wallet client
           if (method === 'eth_sendTransaction' && params?.[0]) {
-            const tx = params[0] as { from: string; to: string; data?: string; value?: string };
+            const tx = params[0] as { from: string; to: string; data?: string; value?: string; gas?: string };
+            
+            // Try to estimate gas first, fallback to 300k if estimation fails
+            let gasLimit: bigint;
+            if (tx.gas) {
+              gasLimit = BigInt(tx.gas);
+            } else if (publicClient) {
+              try {
+                const estimated = await publicClient.estimateGas({
+                  account: tx.from as `0x${string}`,
+                  to: tx.to as `0x${string}`,
+                  data: tx.data as `0x${string}` | undefined,
+                  value: tx.value ? BigInt(tx.value) : undefined,
+                });
+                // Add 20% buffer to estimated gas
+                gasLimit = (estimated * BigInt(120)) / BigInt(100);
+                console.log(`[Transactions] Estimated gas: ${estimated}, with buffer: ${gasLimit}`);
+              } catch (estimateError) {
+                console.log('[Transactions] Gas estimation failed, using fallback:', estimateError);
+                gasLimit = BigInt(300000); // Fallback for contract calls
+              }
+            } else {
+              gasLimit = BigInt(300000);
+            }
+            
             const hash = await walletClient.sendTransaction({
               account: tx.from as `0x${string}`,
               to: tx.to as `0x${string}`,
               data: tx.data as `0x${string}` | undefined,
               value: tx.value ? BigInt(tx.value) : undefined,
+              gas: gasLimit,
             });
             return hash;
           }
@@ -81,7 +108,7 @@ async function getProvider(): Promise<{ request: (args: { method: string; params
       return {
         request: async ({ method, params }) => {
           if (method === 'eth_call' && params) {
-            const [callParams, block] = params as [{ to: string; data: string }, string];
+            const [callParams] = params as [{ to: string; data: string }, string];
             const result = await publicClient.call({
               to: callParams.to as `0x${string}`,
               data: callParams.data as `0x${string}`,
@@ -345,8 +372,29 @@ export async function transferETH(
  * Wait for transaction to be mined
  */
 export async function waitForTransaction(txHash: string, maxAttempts = 60): Promise<boolean> {
+  console.log(`[waitForTransaction] Waiting for tx: ${txHash}`);
+  
+  // Try using viem's waitForTransactionReceipt directly (more reliable)
+  try {
+    const publicClient = getPublicClient(wagmiConfig);
+    if (publicClient) {
+      console.log('[waitForTransaction] Using viem waitForTransactionReceipt');
+      const receipt = await publicClient.waitForTransactionReceipt({
+        hash: txHash as `0x${string}`,
+        timeout: 120_000, // 2 minutes timeout
+      });
+      const success = receipt.status === 'success';
+      console.log(`[waitForTransaction] Receipt found! Status: ${receipt.status}, Success: ${success}`);
+      return success;
+    }
+  } catch (viemError) {
+    console.log('[waitForTransaction] Viem waitForTransactionReceipt failed:', viemError);
+  }
+
+  // Fallback to polling
   const provider = await getProvider();
   if (!provider) {
+    console.error('[waitForTransaction] No provider available');
     return false;
   }
 
@@ -358,17 +406,24 @@ export async function waitForTransaction(txHash: string, maxAttempts = 60): Prom
       });
 
       if (receipt) {
-        const status = (receipt as { status: string }).status;
-        return status === '0x1';
+        // Handle both viem format (status: 'success') and JSON-RPC format (status: '0x1')
+        const receiptObj = receipt as { status: string | 'success' | 'reverted' };
+        const success = receiptObj.status === '0x1' || receiptObj.status === 'success';
+        console.log(`[waitForTransaction] Receipt found! Status: ${receiptObj.status}, Success: ${success}`);
+        return success;
       }
 
       // Wait 2 seconds before next attempt
+      if (i % 10 === 0) {
+        console.log(`[waitForTransaction] Still waiting... attempt ${i + 1}/${maxAttempts}`);
+      }
       await new Promise(resolve => setTimeout(resolve, 2000));
     } catch (error) {
-      console.error('Error checking transaction:', error);
+      console.error('[waitForTransaction] Error checking transaction:', error);
     }
   }
 
+  console.error(`[waitForTransaction] Timeout after ${maxAttempts} attempts`);
   return false;
 }
 
@@ -480,6 +535,27 @@ function encodeCreateQuiz(
 }
 
 /**
+ * Check token balance
+ */
+export async function getTokenBalance(tokenAddress: string, walletAddress: string): Promise<bigint> {
+  const provider = await getProvider();
+  if (!provider) return BigInt(0);
+
+  try {
+    // balanceOf(address) selector
+    const data = '0x70a08231' + padAddress(walletAddress);
+    const result = await provider.request({
+      method: 'eth_call',
+      params: [{ to: tokenAddress, data }, 'latest'],
+    });
+    return BigInt(result as string);
+  } catch (error) {
+    console.error('Failed to get token balance:', error);
+    return BigInt(0);
+  }
+}
+
+/**
  * Create quiz on contract - deposits reward tokens
  * Requires prior approval of reward tokens
  */
@@ -496,12 +572,23 @@ export async function createQuizOnChain(
   stakeDecimals: number,
   walletAddress: string
 ): Promise<TransactionResult> {
+  console.log('[createQuizOnChain] Starting...', {
+    quizId,
+    rewardToken,
+    rewardAmount,
+    rewardDecimals,
+    walletAddress,
+    contractAddress: QUIZ_REWARD_POOL_ADDRESS,
+  });
+
   const provider = await getWalletProvider();
   if (!provider) {
+    console.error('[createQuizOnChain] Wallet not available');
     return { success: false, error: 'Wallet not available' };
   }
 
   if (!QUIZ_REWARD_POOL_ADDRESS) {
+    console.error('[createQuizOnChain] Contract not configured');
     return { success: false, error: 'Quiz contract not configured' };
   }
 
@@ -516,19 +603,42 @@ export async function createQuizOnChain(
     const entryFeeAmountBigInt = entryFeeToken && entryFeeAmount ? parseTokenAmount(entryFeeAmount, entryFeeDecimals) : BigInt(0);
     const stakeAmountBigInt = stakeToken && stakeAmount ? parseTokenAmount(stakeAmount, stakeDecimals) : BigInt(0);
 
+    console.log('[createQuizOnChain] Parsed amounts:', {
+      rewardAmountBigInt: rewardAmountBigInt.toString(),
+      entryFeeAmountBigInt: entryFeeAmountBigInt.toString(),
+      stakeAmountBigInt: stakeAmountBigInt.toString(),
+    });
+
+    // Check token balance first
+    const balance = await getTokenBalance(rewardToken, walletAddress);
+    console.log('[createQuizOnChain] Token balance:', balance.toString());
+    
+    if (balance < rewardAmountBigInt) {
+      const shortfall = rewardAmountBigInt - balance;
+      return { 
+        success: false, 
+        error: `Insufficient token balance. You need ${rewardAmount} tokens but only have ${(Number(balance) / Math.pow(10, rewardDecimals)).toFixed(4)}` 
+      };
+    }
+
     // Check and request approval for reward token
     const currentAllowance = await getAllowance(rewardToken, walletAddress, QUIZ_REWARD_POOL_ADDRESS);
+    console.log('[createQuizOnChain] Current allowance:', currentAllowance.toString());
+    
     if (currentAllowance < rewardAmountBigInt) {
+      console.log('[createQuizOnChain] Requesting approval...');
       const approveResult = await approveToken(rewardToken, QUIZ_REWARD_POOL_ADDRESS, rewardAmountBigInt, walletAddress);
       if (!approveResult.success) {
         return approveResult;
       }
       // Wait for approval tx
       if (approveResult.txHash) {
+        console.log('[createQuizOnChain] Waiting for approval tx:', approveResult.txHash);
         const approved = await waitForTransaction(approveResult.txHash);
         if (!approved) {
           return { success: false, error: 'Token approval failed' };
         }
+        console.log('[createQuizOnChain] Approval confirmed');
       }
     }
 
@@ -543,6 +653,8 @@ export async function createQuizOnChain(
       stakeAmountBigInt
     );
 
+    console.log('[createQuizOnChain] Sending transaction with data:', data.slice(0, 74) + '...');
+
     const txHash = await provider.request({
       method: 'eth_sendTransaction',
       params: [{
@@ -552,14 +664,27 @@ export async function createQuizOnChain(
       }],
     });
 
+    console.log('[createQuizOnChain] Transaction sent:', txHash);
     return { success: true, txHash: txHash as string };
   } catch (error: unknown) {
-    const err = error as { code?: number; message?: string };
+    const err = error as { code?: number; message?: string; data?: unknown };
+    console.error('[createQuizOnChain] Error:', error);
+    
     if (err.code === 4001) {
       return { success: false, error: 'Transaction rejected by user' };
     }
-    console.error('Create quiz failed:', error);
-    return { success: false, error: err.message || 'Create quiz failed' };
+    
+    // Parse common error messages
+    let errorMessage = err.message || 'Create quiz failed';
+    if (errorMessage.includes('insufficient funds')) {
+      errorMessage = 'Insufficient ETH for gas fees';
+    } else if (errorMessage.includes('execution reverted')) {
+      errorMessage = 'Transaction would fail. Check token balance and approval.';
+    } else if (errorMessage.includes('gas estimation')) {
+      errorMessage = 'Network fee estimation failed. This usually means the transaction would revert. Check your token balance.';
+    }
+    
+    return { success: false, error: errorMessage };
   }
 }
 

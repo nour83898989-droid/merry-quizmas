@@ -145,6 +145,8 @@ export default function QuizDetailPage({ params }: { params: Promise<{ id: strin
         rewardToken: quiz.reward_token,
       };
       sessionStorage.setItem(`quiz-session-${data.sessionId}`, JSON.stringify(sessionData));
+      // Store wallet address for API calls in play page
+      sessionStorage.setItem('wallet-address', walletAddress);
       
       router.push(`/quiz/${id}/play?session=${data.sessionId}`);
     } catch (err) {
@@ -336,7 +338,7 @@ export default function QuizDetailPage({ params }: { params: Promise<{ id: strin
           disabled={quiz.remaining_spots === 0 || !isConnected}
           className="christmas-gradient text-white"
         >
-          {quiz.remaining_spots === 0 ? 'No Spots Available' : !isConnected ? '🔗 Connect Wallet First' : '� Starat Quiz'}
+          {quiz.remaining_spots === 0 ? 'No Spots Available' : !isConnected ? '🔗 Connect Wallet First' : '◆ Start Quiz'}
         </Button>
       </div>
     </main>

@@ -2,14 +2,18 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAccount } from 'wagmi';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { DatePicker } from '@/components/ui/date-picker';
 import { ChristmasLayout } from '@/components/christmas/christmas-layout';
+import { useFarcaster } from '@/components/providers/farcaster-provider';
 
 export default function CreatePollPage() {
   const router = useRouter();
+  const { address, isConnected } = useAccount();
+  const { user: farcasterUser } = useFarcaster();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [form, setForm] = useState({
     title: '',
@@ -50,17 +54,29 @@ export default function CreatePollPage() {
 
   const handleSubmit = async () => {
     if (!canSubmit()) return;
+    
+    // Require wallet connection
+    if (!isConnected || !address) {
+      alert('Please connect your wallet first');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
-      // TODO: Get actual FID from wallet/auth
-      const creatorFid = 1; // Placeholder
+      // Use Farcaster FID if available, otherwise use wallet address
+      const creatorFid = farcasterUser?.fid || null;
+      const creatorWallet = address;
 
       const res = await fetch('/api/polls', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-wallet-address': creatorWallet,
+          ...(creatorFid ? { 'x-fid': creatorFid.toString() } : {}),
+        },
         body: JSON.stringify({
           creatorFid,
+          creatorWallet,
           title: form.title,
           description: form.description || null,
           options: form.options.filter((o) => o.trim()),

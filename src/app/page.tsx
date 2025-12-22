@@ -1,16 +1,15 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { ChristmasLayout } from '@/components/christmas/christmas-layout';
-import { ChristmasTree, Gift, Santa, Stocking, CandyCane } from '@/components/christmas/decorations';
+import { ChristmasTree, Gift, Santa } from '@/components/christmas/decorations';
 import Link from 'next/link';
 
 export default function HomePage() {
   return (
     <ChristmasLayout>
       <main className="min-h-screen relative">
-        {/* Main Content */}
         <div className="relative z-10 p-4 space-y-4">
           {/* Hero Banner */}
           <div className="christmas-card rounded-2xl p-6 relative overflow-hidden">
@@ -31,144 +30,61 @@ export default function HomePage() {
                 </div>
               </div>
               <p className="text-foreground-muted mb-4">
-                Play holiday quizzes and win crypto rewards this Christmas season!
+                Play holiday quizzes and win crypto rewards!
               </p>
-              <div className="flex gap-2 flex-wrap">
-                <Link href="/quizzes">
-                  <Button className="christmas-gradient text-white">
-                    <PlayIcon className="w-4 h-4 mr-2" />
-                    Play Now
-                  </Button>
-                </Link>
-                <Link href="/polls">
-                  <Button variant="outline" className="border-primary/50">
-                    <PollIcon className="w-4 h-4 mr-2" />
-                    Polls
-                  </Button>
-                </Link>
-                <Link href="/claim">
-                  <Button variant="outline" className="border-primary/50">
-                    <Gift className="w-4 h-4 mr-2" />
-                    Claim Gifts
-                  </Button>
-                </Link>
-              </div>
             </div>
           </div>
 
-          {/* Quick Stats */}
-          <div className="grid grid-cols-3 gap-3">
-            <StatCard icon={<Gift className="w-8 h-8" />} label="Rewards" value="$10K+" />
-            <StatCard icon={<ChristmasTree className="w-8 h-8" />} label="Quizzes" value="50+" />
-            <StatCard icon={<Stocking className="w-8 h-8" />} label="Winners" value="1K+" />
-          </div>
-
-          {/* Create Quiz Panel */}
-          <Card variant="interactive" className="christmas-card relative overflow-hidden gift-ribbon">
-            <div className="absolute top-2 right-2 opacity-20">
-              <CandyCane className="w-12 h-12" />
-            </div>
-            <div className="relative">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
-                  <Gift className="w-8 h-8" />
+          {/* Join Quiz - Primary Action */}
+          <Link href="/quizzes" className="block">
+            <Card variant="interactive" className="christmas-card relative overflow-hidden">
+              <div className="flex items-center gap-4 p-2">
+                <div className="w-14 h-14 rounded-xl christmas-gradient flex items-center justify-center">
+                  <PlayIcon className="w-8 h-8 text-white" />
                 </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-foreground">Create Quiz</h2>
-                  <p className="text-sm text-foreground-muted">Share the holiday spirit</p>
-                </div>
-              </div>
-              <CardContent className="p-0">
-                <p className="text-sm text-foreground-muted mb-4">
-                  Create festive quizzes with rewards. Perfect for holiday parties and gatherings!
-                </p>
-                <Link href="/create">
-                  <Button variant="secondary" fullWidth>
-                    <PlusIcon className="w-4 h-4 mr-2" />
-                    Create Holiday Quiz
-                  </Button>
-                </Link>
-              </CardContent>
-            </div>
-          </Card>
-
-          {/* Join Quiz Panel */}
-          <Card variant="interactive" className="christmas-card relative overflow-hidden">
-            <div className="absolute top-2 right-2">
-              <span className="px-2 py-1 text-xs font-medium bg-success/20 text-success rounded-full animate-pulse">
-                🔥 Hot
-              </span>
-            </div>
-            <div className="absolute bottom-2 right-2 opacity-20">
-              <Stocking className="w-10 h-10" />
-            </div>
-            <div className="relative">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-12 h-12 rounded-xl bg-success/20 flex items-center justify-center">
-                  <ChristmasTree className="w-8 h-8" />
-                </div>
-                <div>
+                <div className="flex-1">
                   <h2 className="text-lg font-semibold text-foreground">Join Quiz</h2>
-                  <p className="text-sm text-foreground-muted">Win holiday rewards</p>
+                  <p className="text-sm text-foreground-muted">Play & win rewards</p>
                 </div>
+                <ArrowIcon className="w-6 h-6 text-foreground-muted" />
               </div>
-              <CardContent className="p-0">
-                <p className="text-sm text-foreground-muted mb-4">
-                  Browse Christmas quizzes and compete for rewards. Answer correctly to win!
-                </p>
-                <Link href="/quizzes">
-                  <Button variant="outline" fullWidth>
-                    <SearchIcon className="w-4 h-4 mr-2" />
-                    Browse Quizzes
-                  </Button>
-                </Link>
-              </CardContent>
-            </div>
-          </Card>
+            </Card>
+          </Link>
 
-          {/* Polls Panel */}
-          <Card variant="interactive" className="christmas-card relative overflow-hidden">
-            <div className="absolute top-2 right-2">
-              <span className="px-2 py-1 text-xs font-medium bg-primary/20 text-primary rounded-full">
-                🆕 New
-              </span>
-            </div>
-            <div className="relative">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
-                  <span className="text-2xl">📊</span>
+          {/* Create Quiz */}
+          <Link href="/create" className="block">
+            <Card variant="interactive" className="christmas-card relative overflow-hidden">
+              <div className="flex items-center gap-4 p-2">
+                <div className="w-14 h-14 rounded-xl bg-primary/20 flex items-center justify-center">
+                  <PlusIcon className="w-8 h-8 text-primary" />
                 </div>
-                <div>
+                <div className="flex-1">
+                  <h2 className="text-lg font-semibold text-foreground">Create Quiz</h2>
+                  <p className="text-sm text-foreground-muted">Host your own quiz</p>
+                </div>
+                <ArrowIcon className="w-6 h-6 text-foreground-muted" />
+              </div>
+            </Card>
+          </Link>
+
+          {/* Polls */}
+          <Link href="/polls" className="block">
+            <Card variant="interactive" className="christmas-card relative overflow-hidden">
+              <div className="flex items-center gap-4 p-2">
+                <div className="w-14 h-14 rounded-xl bg-secondary/20 flex items-center justify-center">
+                  <PollIcon className="w-8 h-8 text-secondary" />
+                </div>
+                <div className="flex-1">
                   <h2 className="text-lg font-semibold text-foreground">Polls</h2>
                   <p className="text-sm text-foreground-muted">Vote & validate</p>
                 </div>
+                <ArrowIcon className="w-6 h-6 text-foreground-muted" />
               </div>
-              <CardContent className="p-0">
-                <p className="text-sm text-foreground-muted mb-4">
-                  Create polls and let the community vote! Perfect for decisions and validations.
-                </p>
-                <Link href="/polls">
-                  <Button variant="outline" fullWidth>
-                    <PollIcon className="w-4 h-4 mr-2" />
-                    Browse Polls
-                  </Button>
-                </Link>
-              </CardContent>
-            </div>
-          </Card>
-
-          {/* How it works */}
-          <OnboardingSection />
+            </Card>
+          </Link>
 
           {/* Footer */}
           <div className="text-center py-4">
-            <div className="flex justify-center gap-2 mb-2">
-              <ChristmasTree className="w-6 h-6" />
-              <Santa className="w-6 h-6" />
-              <Gift className="w-6 h-6" />
-              <Stocking className="w-6 h-6" />
-              <CandyCane className="w-6 h-6" />
-            </div>
             <p className="text-xs text-foreground-muted">
               🎄 Happy Holidays from Merry Quizmas Team 🎄
             </p>
@@ -176,70 +92,6 @@ export default function HomePage() {
         </div>
       </main>
     </ChristmasLayout>
-  );
-}
-
-function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <Card className="christmas-card text-center py-3">
-      <div className="flex justify-center mb-1 opacity-70">{icon}</div>
-      <p className="text-lg font-bold text-foreground">{value}</p>
-      <p className="text-xs text-foreground-muted">{label}</p>
-    </Card>
-  );
-}
-
-function OnboardingSection() {
-  return (
-    <Card className="christmas-card">
-      <h3 className="text-base font-semibold text-foreground mb-4 flex items-center gap-2">
-        <span>⭐</span> How it works
-      </h3>
-      <div className="space-y-3">
-        <OnboardingStep 
-          emoji="🔗"
-          title="Connect Wallet" 
-          description="Sign in with MetaMask or any wallet"
-        />
-        <OnboardingStep 
-          emoji="🎮"
-          title="Join or Create" 
-          description="Browse quizzes or create your own"
-        />
-        <OnboardingStep 
-          emoji="⏱️"
-          title="Answer Questions" 
-          description="Answer correctly within time limit"
-        />
-        <OnboardingStep 
-          emoji="🎁"
-          title="Win Rewards" 
-          description="Claim your crypto rewards instantly"
-        />
-      </div>
-    </Card>
-  );
-}
-
-function OnboardingStep({ 
-  emoji,
-  title, 
-  description 
-}: { 
-  emoji: string;
-  title: string; 
-  description: string;
-}) {
-  return (
-    <div className="flex items-start gap-3">
-      <div className="w-8 h-8 rounded-full christmas-gradient flex items-center justify-center flex-shrink-0">
-        <span className="text-sm">{emoji}</span>
-      </div>
-      <div>
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        <p className="text-xs text-foreground-muted">{description}</p>
-      </div>
-    </div>
   );
 }
 
@@ -259,10 +111,10 @@ function PlayIcon({ className }: { className?: string }) {
   );
 }
 
-function SearchIcon({ className }: { className?: string }) {
+function ArrowIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
     </svg>
   );
 }
