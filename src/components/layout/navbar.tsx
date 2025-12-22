@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAccount, useDisconnect } from 'wagmi';
-import { Button } from '@/components/ui/button';
 import { ConnectButton } from '@/components/wallet/connect-button';
 import { useFarcaster } from '@/components/providers/farcaster-provider';
 import { IS_TESTNET } from '@/lib/web3/config';
@@ -17,9 +16,10 @@ export function Navbar() {
   const { user: farcasterUser, isReady } = useFarcaster();
   
   const [isCorrectNetwork, setIsCorrectNetwork] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false); // Wallet dropdown
+  const [mobileNavOpen, setMobileNavOpen] = useState(false); // Mobile navigation
   const [isAdmin, setIsAdmin] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Check network when connected
   useEffect(() => {
@@ -48,11 +48,11 @@ export function Navbar() {
     }
   }, []);
 
-  // Close menu on outside click
+  // Close dropdown on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpen(false);
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -85,7 +85,7 @@ export function Navbar() {
 
   const handleDisconnect = () => {
     disconnect();
-    setMenuOpen(false);
+    setDropdownOpen(false);
   };
 
   const truncateAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -151,9 +151,9 @@ export function Navbar() {
 
             {/* Connected State - Show PFP/Username or Address */}
             {isConnected && address ? (
-              <div className="relative" ref={menuRef}>
+              <div className="relative" ref={dropdownRef}>
                 <button
-                  onClick={() => setMenuOpen(!menuOpen)}
+                  onClick={() => setDropdownOpen(!dropdownOpen)}
                   className="flex items-center gap-2 px-3 py-2 bg-surface rounded-xl border border-foreground/10 hover:border-foreground/20 transition-colors"
                 >
                   {/* Farcaster PFP */}
@@ -178,24 +178,24 @@ export function Navbar() {
                     </span>
                   )}
                   
-                  <ChevronIcon className={`w-4 h-4 text-foreground-muted transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
+                  <ChevronIcon className={`w-4 h-4 text-foreground-muted transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
 
                 {/* Dropdown Menu */}
-                {menuOpen && (
-                  <div className="absolute right-0 mt-2 w-48 py-2 bg-surface rounded-xl border border-foreground/10 shadow-xl">
-                    <Link href="/profile" onClick={() => setMenuOpen(false)}>
+                {dropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-48 py-2 bg-surface rounded-xl border border-foreground/10 shadow-xl z-50">
+                    <Link href="/profile" onClick={() => setDropdownOpen(false)}>
                       <div className="px-4 py-2 text-sm text-foreground hover:bg-foreground/5 cursor-pointer">
                         👤 Profile
                       </div>
                     </Link>
-                    <Link href="/claim" onClick={() => setMenuOpen(false)}>
+                    <Link href="/claim" onClick={() => setDropdownOpen(false)}>
                       <div className="px-4 py-2 text-sm text-foreground hover:bg-foreground/5 cursor-pointer">
                         🎁 My Rewards
                       </div>
                     </Link>
                     {isAdmin && (
-                      <Link href="/admin" onClick={() => setMenuOpen(false)}>
+                      <Link href="/admin" onClick={() => setDropdownOpen(false)}>
                         <div className="px-4 py-2 text-sm text-foreground hover:bg-foreground/5 cursor-pointer">
                           🛡️ Admin
                         </div>
@@ -218,7 +218,7 @@ export function Navbar() {
 
             {/* Mobile Menu Button */}
             <button
-              onClick={() => setMenuOpen(!menuOpen)}
+              onClick={() => setMobileNavOpen(!mobileNavOpen)}
               className="md:hidden p-2 rounded-lg hover:bg-foreground/5"
             >
               <MenuIcon className="w-5 h-5 text-foreground" />
@@ -228,11 +228,11 @@ export function Navbar() {
 
 
         {/* Mobile Nav */}
-        {menuOpen && (
+        {mobileNavOpen && (
           <div className="md:hidden mt-3 pt-3 border-t border-foreground/10">
-            <div className="grid grid-cols-5 gap-1">
+            <div className="grid grid-cols-6 gap-1">
               {navItems.map((item) => (
-                <Link key={item.href} href={item.href} onClick={() => setMenuOpen(false)}>
+                <Link key={item.href} href={item.href} onClick={() => setMobileNavOpen(false)}>
                   <div
                     className={`flex flex-col items-center py-2 rounded-lg text-xs ${
                       pathname === item.href
