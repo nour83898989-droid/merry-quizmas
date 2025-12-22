@@ -32,12 +32,21 @@ export function TokenSelector({
 
   // Fetch balances when wallet connected
   useEffect(() => {
-    if (walletAddress && showBalance) {
-      setLoading(true);
-      getAllTokenBalances(walletAddress)
-        .then(setBalances)
-        .finally(() => setLoading(false));
-    }
+    if (!walletAddress || !showBalance) return;
+    
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoading(true);
+    
+    getAllTokenBalances(walletAddress)
+      .then(data => {
+        if (!cancelled) setBalances(data);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    
+    return () => { cancelled = true; };
   }, [walletAddress, showBalance]);
 
   // Close dropdown on outside click

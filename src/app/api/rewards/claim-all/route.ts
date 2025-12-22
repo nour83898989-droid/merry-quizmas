@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
 
     // Calculate total amount
     const totalAmount = claims.reduce(
-      (sum, claim) => sum + parseFloat(claim.reward_amount || '0'),
+      (sum, claim) => sum + (claim.reward_amount || 0),
       0
     );
 

@@ -13,13 +13,13 @@ interface ClaimableReward {
   id: string;
   quizId: string;
   quizTitle: string;
-  amount: string;
+  amount: number;
   token: string;
   rank: number;
   poolTier: number;
-  rankInPool: number;
-  completedAt: string;
-  status: string;
+  rankInPool: number | null;
+  completedAt: string | null;
+  status: string | null;
   contractQuizId?: string;
 }
 
@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
         // Add from winners table if not in claims
         rewardMap.set(`winner-${winner.id}`, {
           id: `winner-${winner.id}`,
-          quizId: winner.quiz_id,
+          quizId: winner.quiz_id || '',
           quizTitle: quiz?.title || 'Unknown Quiz',
           amount: winner.reward_amount,
           token: quiz?.reward_token || 'tokens',
@@ -140,11 +140,11 @@ export async function GET(request: NextRequest) {
     // Calculate totals
     const totalPending = rewards
       .filter(r => r.status === 'pending')
-      .reduce((sum, r) => sum + parseFloat(r.amount || '0'), 0);
+      .reduce((sum, r) => sum + (r.amount || 0), 0);
 
     const totalClaimed = rewards
       .filter(r => r.status === 'claimed')
-      .reduce((sum, r) => sum + parseFloat(r.amount || '0'), 0);
+      .reduce((sum, r) => sum + (r.amount || 0), 0);
 
     return NextResponse.json({
       rewards,

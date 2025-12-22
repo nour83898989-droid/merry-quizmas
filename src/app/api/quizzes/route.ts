@@ -23,7 +23,7 @@ interface QuizListItem {
   remainingSpots: number;
   timePerQuestion: number;
   endsAt: string | null;
-  stakeRequired: { token: string; amount: string } | null;
+  stakeRequired: { token: string; amount: number } | null;
   // New reward pool fields
   rewardPools: {
     tier: number;
@@ -68,15 +68,8 @@ export async function GET() {
         ? (BigInt(quiz.reward_amount) / BigInt(quiz.winner_limit)).toString()
         : '0';
       
-      // Parse reward pools - use type assertion for new columns
-      const quizData = quiz as typeof quiz & {
-        reward_pools?: unknown;
-        total_pool_amount?: string;
-        entry_fee?: string;
-        entry_fee_token?: string;
-      };
-      
-      const rewardPools = (quizData.reward_pools as {
+      // Parse reward pools
+      const rewardPools = (quiz.reward_pools as {
         tier: number;
         name: string;
         winnerCount: number;
@@ -100,9 +93,9 @@ export async function GET() {
           ? { token: quiz.stake_token, amount: quiz.stake_amount }
           : null,
         rewardPools,
-        totalPoolAmount: quizData.total_pool_amount?.toString() || quiz.reward_amount,
-        entryFee: quizData.entry_fee || null,
-        entryFeeToken: quizData.entry_fee_token || null,
+        totalPoolAmount: String(quiz.total_pool_amount ?? quiz.reward_amount),
+        entryFee: quiz.entry_fee || null,
+        entryFeeToken: quiz.entry_fee_token || null,
       };
     });
 
@@ -211,13 +204,13 @@ export async function POST(request: NextRequest) {
         description: body.description || null,
         questions_json: serializeQuestions(questionsWithIds) as unknown as Json,
         reward_token: body.rewardToken,
-        reward_amount: body.rewardAmount,
+        reward_amount: parseInt(body.rewardAmount) || 0,
         winner_limit: body.winnerLimit,
         time_per_question: body.timePerQuestion || 15,
         start_time: body.startTime || null,
         end_time: body.endTime || null,
         stake_token: body.stakeToken || null,
-        stake_amount: body.stakeAmount || null,
+        stake_amount: body.stakeAmount ? parseInt(body.stakeAmount) : null,
         nft_enabled: body.nftEnabled || false,
         nft_artwork_url: body.nftArtworkUrl || null,
         status: 'active', // Quiz is active immediately after creation
@@ -229,7 +222,7 @@ export async function POST(request: NextRequest) {
         ],
         entry_fee: body.entryFee || null,
         entry_fee_token: body.entryFeeToken || null,
-        total_pool_amount: body.rewardAmount,
+        total_pool_amount: parseInt(body.rewardAmount) || 0,
         // Contract fields
         contract_quiz_id: body.contractQuizId || null,
         deposit_tx_hash: body.depositTxHash || null,

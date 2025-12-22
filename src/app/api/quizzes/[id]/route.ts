@@ -20,7 +20,7 @@ interface QuizDetail {
   remaining_spots: number;
   total_spots: number;
   ends_at: string | null;
-  stake_required: { token: string; amount: string } | null;
+  stake_required: { token: string; amount: number } | null;
   questions: {
     id: string;
     text: string;
@@ -79,15 +79,7 @@ export async function GET(
       : '0';
 
     // Parse reward pools
-    const quizData = quiz as typeof quiz & {
-      reward_pools?: unknown;
-      total_pool_amount?: string;
-      entry_fee?: string;
-      entry_fee_token?: string;
-      contract_quiz_id?: string;
-    };
-    
-    const rewardPools = (quizData.reward_pools as {
+    const rewardPools = (quiz.reward_pools as {
       tier: number;
       name: string;
       winnerCount: number;
@@ -113,10 +105,10 @@ export async function GET(
         : null,
       questions: questionsWithoutAnswers,
       reward_pools: rewardPools,
-      total_pool_amount: quizData.total_pool_amount?.toString() || quiz.reward_amount,
-      entry_fee: quizData.entry_fee || null,
-      entry_fee_token: quizData.entry_fee_token || null,
-      contract_quiz_id: quizData.contract_quiz_id || null,
+      total_pool_amount: String(quiz.total_pool_amount ?? quiz.reward_amount),
+      entry_fee: quiz.entry_fee || null,
+      entry_fee_token: quiz.entry_fee_token || null,
+      contract_quiz_id: quiz.contract_quiz_id || null,
     };
 
     return NextResponse.json({ quiz: response });

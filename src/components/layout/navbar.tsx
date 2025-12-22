@@ -20,7 +20,8 @@ export function Navbar() {
   useEffect(() => {
     if (typeof window !== 'undefined' && window.ethereum) {
       // Check existing connection
-      window.ethereum.request({ method: 'eth_accounts' }).then((accounts) => {
+      window.ethereum.request({ method: 'eth_accounts' }).then((result) => {
+        const accounts = result as string[];
         if (accounts && accounts.length > 0) {
           setAddress(accounts[0]);
           checkNetwork();
@@ -57,32 +58,6 @@ export function Navbar() {
     }
   };
 
-  // Check wallet on mount
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.ethereum) {
-      // Check existing connection
-      window.ethereum.request({ method: 'eth_accounts' }).then((accounts) => {
-        if (accounts && accounts.length > 0) {
-          setAddress(accounts[0]);
-          checkNetwork();
-        }
-      });
-
-      // Listen for account changes
-      window.ethereum.on?.('accountsChanged', (accounts: unknown) => {
-        const accs = accounts as string[];
-        if (accs && accs.length > 0) {
-          setAddress(accs[0]);
-        } else {
-          setAddress(null);
-        }
-      });
-
-      // Listen for network changes
-      window.ethereum.on?.('chainChanged', () => checkNetwork());
-    }
-  }, []);
-
   // Close menu on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -106,7 +81,8 @@ export function Navbar() {
     
     setIsConnecting(true);
     try {
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const result = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const accounts = result as string[];
       if (accounts && accounts.length > 0) {
         setAddress(accounts[0]);
         const network = await getCurrentNetwork();

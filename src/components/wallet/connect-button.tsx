@@ -46,7 +46,8 @@ export function ConnectButton({ onConnect }: ConnectButtonProps) {
 
     if (typeof window !== 'undefined' && window.ethereum) {
       // Check if already connected
-      window.ethereum.request({ method: 'eth_accounts' }).then((accounts) => {
+      window.ethereum.request({ method: 'eth_accounts' }).then((result) => {
+        const accounts = result as string[];
         if (accounts && accounts.length > 0) {
           setAddress(accounts[0]);
         }
@@ -73,9 +74,10 @@ export function ConnectButton({ onConnect }: ConnectButtonProps) {
     try {
       // Check if ethereum provider exists (MetaMask, etc.)
       if (typeof window !== 'undefined' && window.ethereum) {
-        const accounts = await window.ethereum.request({
+        const result = await window.ethereum.request({
           method: 'eth_requestAccounts',
         });
+        const accounts = result as string[];
         
         if (accounts && accounts.length > 0) {
           const addr = accounts[0];
@@ -187,15 +189,4 @@ function DisconnectIcon({ className }: { className?: string }) {
       <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
     </svg>
   );
-}
-
-// Extend Window interface for ethereum
-declare global {
-  interface Window {
-    ethereum?: {
-      request: (args: { method: string; params?: unknown[] }) => Promise<string[]>;
-      on?: (event: string, callback: (...args: unknown[]) => void) => void;
-      removeListener?: (event: string, callback: (...args: unknown[]) => void) => void;
-    };
-  }
 }
