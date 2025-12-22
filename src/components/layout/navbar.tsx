@@ -6,8 +6,14 @@ import { usePathname } from 'next/navigation';
 import { useAccount, useDisconnect } from 'wagmi';
 import { ConnectButton } from '@/components/wallet/connect-button';
 import { useFarcaster } from '@/components/providers/farcaster-provider';
-import { IS_TESTNET } from '@/lib/web3/config';
-import { getCurrentNetwork, switchToBase } from '@/lib/web3/client';
+import { IS_TESTNET, BASE_CHAIN_ID, BASE_SEPOLIA_CHAIN_ID } from '@/lib/web3/config';
+import { getCurrentNetwork, switchToBase, switchToBaseMainnet, switchToBaseSepolia } from '@/lib/web3/client';
+
+// Chain options
+const CHAINS = [
+  { id: BASE_CHAIN_ID, name: 'Base Mainnet', shortName: 'Base', color: 'bg-blue-500' },
+  { id: BASE_SEPOLIA_CHAIN_ID, name: 'Base Sepolia', shortName: 'Sepolia', color: 'bg-orange-500' },
+];
 
 export function Navbar() {
   const pathname = usePathname();
@@ -16,10 +22,16 @@ export function Navbar() {
   const { user: farcasterUser, isReady } = useFarcaster();
   
   const [isCorrectNetwork, setIsCorrectNetwork] = useState(true);
+  const [currentChainId, setCurrentChainId] = useState<number | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false); // Wallet dropdown
+  const [chainDropdownOpen, setChainDropdownOpen] = useState(false); // Chain selector
   const [mobileNavOpen, setMobileNavOpen] = useState(false); // Mobile navigation
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isSwitchingChain, setIsSwitchingChain] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const chainDropdownRef = useRef<HTMLDivElement>(null);
+
+  const currentChain = CHAINS.find(c => c.id === currentChainId) || CHAINS[IS_TESTNET ? 1 : 0];
 
   // Check network when connected
   useEffect(() => {
@@ -58,6 +70,9 @@ export function Navbar() {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setDropdownOpen(false);
       }
+      if (chainDropdownRef.current && !chainDropdownRef.current.contains(event.target as Node)) {
+        setChainDropdownOpen(false);
+      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -86,12 +101,27 @@ export function Navbar() {
     const network = await getCurrentNetwork();
     if (network) {
       setIsCorrectNetwork(network.isCorrect);
+      setCurrentChainId(network.chainId);
     }
   };
 
   const handleSwitchNetwork = async () => {
     const success = await switchToBase();
     if (success) setIsCorrectNetwork(true);
+  };
+
+  const handleSwitchChain = async (chainId: number) => {
+    setIsSwitchingChain(true);
+    setChainDropdownOpen(false);
+    try {
+      if (chainId === BASE_CHAIN_ID) {
+        await switchToBaseMainnet();
+      } else {
+        await switchToBaseSepolia();
+      }
+    } finally {
+      setIsSwitchingChain(false);
+    }
   };
 
   const handleDisconnect = () => {
@@ -150,14 +180,41 @@ export function Navbar() {
 
           {/* Wallet & Menu */}
           <div className="flex items-center gap-2">
-            {/* Network Warning */}
-            {isConnected && !isCorrectNetwork && (
-              <button
-                onClick={handleSwitchNetwork}
-                className="px-2 py-1 text-xs bg-warning/20 text-warning rounded-lg hover:bg-warning/30"
-              >
-                Wrong Network
-              </button>
+            {/* Chain Selector Dropdown */}
+            {isConnected && (
+              <div className="relative" ref={chainDropdownRef}>
+                <button
+                  onClick={() => setChainDropdownOpen(!chainDropdownOpen)}
+                  disabled={isSwitchingChain}
+                  className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    !isCorrectNetwork
+                      ? 'bg-warning/20 text-warning hover:bg-warning/30'
+                      : 'bg-surface hover:bg-surface/80 text-foreground border border-foreground/10'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${currentChain.color} ${!isCorrectNetwork ? 'animate-pulse' : ''}`} />
+                  {isSwitchingChain ? '...' : currentChain.shortName}
+                  <ChevronIcon className={`w-3 h-3 transition-transform ${chainDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {chainDropdownOpen && (
+                  <div className="absolute top-full right-0 mt-1 bg-surface border border-foreground/10 rounded-lg shadow-xl z-50 min-w-[140px] overflow-hidden">
+                    {CHAINS.map(chain => (
+                      <button
+                        key={chain.id}
+                        onClick={() => handleSwitchChain(chain.id)}
+                        className={`w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-foreground/5 transition-colors ${
+                          currentChainId === chain.id ? 'bg-primary/10 text-primary' : 'text-foreground'
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${chain.color}`} />
+                        {chain.name}
+                        {currentChainId === chain.id && <span className="ml-auto">✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Connected State - Show PFP/Username or Address */}
@@ -182,12 +239,6 @@ export function Navbar() {
                   <span className="text-sm font-medium text-foreground">
                     {!isReady ? '...' : farcasterUser?.username ? `@${farcasterUser.username}` : truncateAddress(address)}
                   </span>
-                  
-                  {IS_TESTNET && (
-                    <span className="text-xs px-1.5 py-0.5 bg-warning/20 text-warning rounded">
-                      Testnet
-                    </span>
-                  )}
                   
                   <ChevronIcon className={`w-4 h-4 text-foreground-muted transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
                 </button>

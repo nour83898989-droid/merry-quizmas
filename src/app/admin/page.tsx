@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { searchUsersByUsername } from '@/lib/neynar/client';
+import { useFarcaster } from '@/components/providers/farcaster-provider';
 
 interface AdminStats {
   totalQuizzes: number;
@@ -36,6 +37,7 @@ interface AdminUser {
 export default function AdminPage() {
   const router = useRouter();
   const { address, isConnected } = useAccount();
+  const { user: farcasterUser, isInMiniApp } = useFarcaster();
   const [role, setRole] = useState<string | null>(null);
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -50,11 +52,23 @@ export default function AdminPage() {
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupResult, setLookupResult] = useState<string | null>(null);
 
-  const fetchAdminData = useCallback(async (wallet: string) => {
+  // Build headers for API calls - support both wallet and FID
+  const getAuthHeaders = useCallback((): Record<string, string> => {
+    const headers: Record<string, string> = {};
+    if (address) headers['x-wallet-address'] = address;
+    if (farcasterUser?.fid) headers['x-fid'] = String(farcasterUser.fid);
+    return headers;
+  }, [address, farcasterUser?.fid]);
+
+  const fetchAdminData = useCallback(async () => {
+    const headers = getAuthHeaders();
+    if (Object.keys(headers).length === 0) {
+      setLoading(false);
+      return;
+    }
+
     try {
-      const res = await fetch('/api/admin', {
-        headers: { 'x-wallet-address': wallet },
-      });
+      const res = await fetch('/api/admin', { headers });
       
       if (res.status === 403) {
         router.push('/');
@@ -74,18 +88,24 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, [router, getAuthHeaders]);
 
   useEffect(() => {
+    // Check if we have any auth (wallet or FID)
     if (isConnected && address) {
-      fetchAdminData(address);
-    } else {
-      router.push('/');
+      fetchAdminData();
+    } else if (farcasterUser?.fid) {
+      // In MiniApp with FID but no wallet connected yet
+      fetchAdminData();
+    } else if (!isConnected && !farcasterUser?.fid) {
+      setLoading(false);
     }
-  }, [isConnected, address, fetchAdminData, router]);
+  }, [isConnected, address, farcasterUser?.fid, fetchAdminData]);
 
   const handleAction = async (action: string, data: Record<string, unknown>) => {
-    if (!address) return;
+    const headers = getAuthHeaders();
+    if (Object.keys(headers).length === 0) return;
+    
     setActionLoading(action);
     
     try {
@@ -93,14 +113,14 @@ export default function AdminPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-wallet-address': address,
+          ...headers,
         },
         body: JSON.stringify({ action, ...data }),
       });
       
       const result = await res.json();
       if (result.success) {
-        fetchAdminData(address);
+        fetchAdminData();
         setBanInput('');
         setUnbanInput('');
         setNewAdminInput('');
@@ -124,6 +144,25 @@ export default function AdminPage() {
             {[1, 2, 3, 4].map(i => <div key={i} className="h-24 bg-surface rounded-xl" />)}
           </div>
         </div>
+      </main>
+    );
+  }
+
+  // Show connect wallet message if not connected and not in MiniApp with FID
+  if (!isConnected && !farcasterUser?.fid) {
+    return (
+      <main className="min-h-screen p-4 bg-background flex items-center justify-center">
+        <Card className="text-center max-w-sm p-6">
+          <h2 className="text-xl font-bold text-foreground mb-2">🛡️ Admin Access</h2>
+          <p className="text-foreground-muted mb-4">
+            {isInMiniApp 
+              ? 'Loading your Farcaster account...'
+              : 'Please connect your wallet to access the admin dashboard.'}
+          </p>
+          <Button variant="outline" onClick={() => router.push('/')}>
+            ← Back to Home
+          </Button>
+        </Card>
       </main>
     );
   }

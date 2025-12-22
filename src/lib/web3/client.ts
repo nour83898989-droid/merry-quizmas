@@ -7,6 +7,8 @@ import { getPublicClient, getWalletClient } from '@wagmi/core';
 import { wagmiConfig } from '@/components/providers/farcaster-provider';
 import { 
   ACTIVE_CHAIN_ID,
+  BASE_CHAIN_ID,
+  BASE_SEPOLIA_CHAIN_ID,
   IS_TESTNET,
   REWARD_TOKEN_ADDRESS,
   SUPPORTED_TOKENS,
@@ -154,7 +156,8 @@ export async function getCurrentNetwork(): Promise<NetworkInfo | null> {
 }
 
 /**
- * Switch to the active network (Base Mainnet or Base Sepolia)
+ * Switch to the active network (Base Mainnet or Base Sepolia based on IS_TESTNET)
+ * Used for auto-switching to the "correct" network based on env
  */
 export async function switchToBase(): Promise<boolean> {
   const provider = await getWalletProvider();
@@ -187,6 +190,70 @@ export async function switchToBase(): Promise<boolean> {
       }
     }
     console.error('Failed to switch network:', switchError);
+    return false;
+  }
+}
+
+/**
+ * Switch to Base Mainnet (chain ID 8453)
+ */
+export async function switchToBaseMainnet(): Promise<boolean> {
+  const provider = await getWalletProvider();
+  if (!provider) return false;
+
+  try {
+    await provider.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: getChainIdHex(BASE_CHAIN_ID) }],
+    });
+    return true;
+  } catch (switchError: unknown) {
+    const error = switchError as { code?: number };
+    if (error.code === 4902) {
+      try {
+        await provider.request({
+          method: 'wallet_addEthereumChain',
+          params: [getChainConfig(false)], // false = mainnet
+        });
+        return true;
+      } catch (addError) {
+        console.error('Failed to add Base Mainnet:', addError);
+        return false;
+      }
+    }
+    console.error('Failed to switch to Base Mainnet:', switchError);
+    return false;
+  }
+}
+
+/**
+ * Switch to Base Sepolia (testnet, chain ID 84532)
+ */
+export async function switchToBaseSepolia(): Promise<boolean> {
+  const provider = await getWalletProvider();
+  if (!provider) return false;
+
+  try {
+    await provider.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: getChainIdHex(BASE_SEPOLIA_CHAIN_ID) }],
+    });
+    return true;
+  } catch (switchError: unknown) {
+    const error = switchError as { code?: number };
+    if (error.code === 4902) {
+      try {
+        await provider.request({
+          method: 'wallet_addEthereumChain',
+          params: [getChainConfig(true)], // true = testnet
+        });
+        return true;
+      } catch (addError) {
+        console.error('Failed to add Base Sepolia:', addError);
+        return false;
+      }
+    }
+    console.error('Failed to switch to Base Sepolia:', switchError);
     return false;
   }
 }
@@ -446,37 +513,6 @@ export async function claimAllRewards(
       error: 'Network error. Please try again.',
     };
   }
-}
-
-/**
- * Watch for transaction confirmation
- */
-export async function waitForTransaction(txHash: string, maxAttempts = 30): Promise<boolean> {
-  const provider = await getProvider();
-  if (!provider) {
-    return false;
-  }
-
-  for (let i = 0; i < maxAttempts; i++) {
-    try {
-      const receipt = await provider.request({
-        method: 'eth_getTransactionReceipt',
-        params: [txHash],
-      });
-
-      if (receipt) {
-        const status = (receipt as { status: string }).status;
-        return status === '0x1';
-      }
-
-      // Wait 2 seconds before next attempt
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    } catch (error) {
-      console.error('Error checking transaction:', error);
-    }
-  }
-
-  return false;
 }
 
 // Extend Window interface - use 'any' to avoid conflicts with wagmi/coinbase types
