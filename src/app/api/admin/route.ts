@@ -90,8 +90,9 @@ export async function GET(request: NextRequest) {
     const { data: recentQuizzes } = await supabase
       .from('quizzes')
       .select('id, title, creator_wallet, status, moderation_status, created_at')
+      .neq('status', 'deleted')
       .order('created_at', { ascending: false })
-      .limit(10);
+      .limit(20);
 
     // Get recent attempts
     const { data: recentAttempts } = await supabase
@@ -99,6 +100,27 @@ export async function GET(request: NextRequest) {
       .select('id, quiz_id, wallet_address, score, status, created_at')
       .order('created_at', { ascending: false })
       .limit(10);
+
+    // Get recent polls
+    const { data: recentPolls } = await supabase
+      .from('polls')
+      .select('id, title, creator_address, total_votes, created_at')
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    // Get recent winners (leaderboard entries)
+    const { data: recentWinners } = await supabase
+      .from('winners')
+      .select('id, quiz_id, wallet_address, rank, reward_amount, completion_time_ms, created_at')
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    // Get recent reward claims
+    const { data: recentClaims } = await supabase
+      .from('reward_claims')
+      .select('id, quiz_id, wallet_address, reward_amount, status, created_at')
+      .order('created_at', { ascending: false })
+      .limit(20);
 
     return NextResponse.json({
       role,
@@ -111,6 +133,9 @@ export async function GET(request: NextRequest) {
       },
       recentQuizzes: recentQuizzes || [],
       recentAttempts: recentAttempts || [],
+      recentPolls: recentPolls || [],
+      recentWinners: recentWinners || [],
+      recentClaims: recentClaims || [],
       admins: adminsResult.data || [],
     });
   } catch (error) {
@@ -120,8 +145,11 @@ export async function GET(request: NextRequest) {
 }
 
 interface AdminAction {
-  action: 'moderate_quiz' | 'ban_user' | 'unban_user' | 'set_winner' | 'add_admin' | 'remove_admin';
+  action: 'moderate_quiz' | 'ban_user' | 'unban_user' | 'set_winner' | 'add_admin' | 'remove_admin' | 'delete_quiz' | 'delete_poll' | 'delete_leaderboard_entry' | 'delete_reward_claim';
   quizId?: string;
+  pollId?: string;
+  winnerId?: string;
+  claimId?: string;
   walletAddress?: string;
   fid?: number; // Support FID for adding admins
   status?: 'approved' | 'rejected';
@@ -278,6 +306,73 @@ export async function POST(request: NextRequest) {
 
         if (error) throw error;
         return NextResponse.json({ success: true, message: 'Admin removed' });
+      }
+
+      case 'delete_quiz': {
+        // Soft delete - set status to 'deleted'
+        if (!body.quizId) {
+          return NextResponse.json({ error: 'BAD_REQUEST', message: 'quizId required' }, { status: 400 });
+        }
+
+        const { error } = await supabase
+          .from('quizzes')
+          .update({ status: 'deleted' })
+          .eq('id', body.quizId);
+
+        if (error) throw error;
+        return NextResponse.json({ success: true, message: 'Quiz deleted' });
+      }
+
+      case 'delete_poll': {
+        // Hard delete poll (polls table doesn't have status column)
+        if (!body.pollId) {
+          return NextResponse.json({ error: 'BAD_REQUEST', message: 'pollId required' }, { status: 400 });
+        }
+
+        // First delete related poll_votes
+        await supabase
+          .from('poll_votes')
+          .delete()
+          .eq('poll_id', body.pollId);
+
+        // Then delete the poll
+        const { error } = await supabase
+          .from('polls')
+          .delete()
+          .eq('id', body.pollId);
+
+        if (error) throw error;
+        return NextResponse.json({ success: true, message: 'Poll deleted' });
+      }
+
+      case 'delete_leaderboard_entry': {
+        // Hard delete winner entry
+        if (!body.winnerId) {
+          return NextResponse.json({ error: 'BAD_REQUEST', message: 'winnerId required' }, { status: 400 });
+        }
+
+        const { error } = await supabase
+          .from('winners')
+          .delete()
+          .eq('id', body.winnerId);
+
+        if (error) throw error;
+        return NextResponse.json({ success: true, message: 'Leaderboard entry deleted' });
+      }
+
+      case 'delete_reward_claim': {
+        // Hard delete reward claim
+        if (!body.claimId) {
+          return NextResponse.json({ error: 'BAD_REQUEST', message: 'claimId required' }, { status: 400 });
+        }
+
+        const { error } = await supabase
+          .from('reward_claims')
+          .delete()
+          .eq('id', body.claimId);
+
+        if (error) throw error;
+        return NextResponse.json({ success: true, message: 'Reward claim deleted' });
       }
 
       default:

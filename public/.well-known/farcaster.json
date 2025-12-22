@@ -23,16 +23,17 @@
       "blockchain"
     ],
     "requiredChains": [
-      "eip155:8453"
+      "eip155:8453",
+      "eip155:84532"
     ],
     "requiredCapabilities": [
       "wallet.getEthereumProvider"
     ],
     "imageUrl": "https://merry-quizmas.vercel.app/icon.png",
     "ogImageUrl": "https://merry-quizmas.vercel.app/og-image.png",
-    "heroImageUrl": "https://merry-quizmas.vercel.app/christmas-banner.png",
+    "heroImageUrl": "https://merry-quizmas.vercel.app/heroimage.png",
     "screenshotUrls": [
-      "https://merry-quizmas.vercel.app/christmas-banner.png"
+      "https://merry-quizmas.vercel.app/heroimage.png"
     ],
     "webhookUrl": "https://merry-quizmas.vercel.app/api/webhook"
   }

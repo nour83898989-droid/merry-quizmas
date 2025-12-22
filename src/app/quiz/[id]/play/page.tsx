@@ -7,6 +7,7 @@ import { TimerBar } from '@/components/quiz/timer-bar';
 import { AnswerOption } from '@/components/quiz/answer-option';
 import { ProgressIndicator } from '@/components/quiz/progress-indicator';
 import { ResultScreen } from '@/components/quiz/result-screen';
+import { shareQuiz } from '@/lib/share';
 
 interface Question {
   id: string;
@@ -258,7 +259,15 @@ export default function QuizPlayPage({ params }: { params: Promise<{ id: string 
         rewardToken={session.rewardToken}
         rank={finalResult.rank}
         onShare={() => {
-          // TODO: Implement share functionality
+          shareQuiz({
+            quizId: id,
+            quizTitle: session.quizTitle,
+            score: finalResult.score,
+            totalQuestions: finalResult.totalQuestions,
+            isWinner: finalResult.isWinner,
+            rewardAmount: finalResult.rewardAmount,
+            rewardToken: session.rewardToken,
+          });
         }}
         onViewLeaderboard={() => router.push(`/quiz/${id}/leaderboard`)}
         onPlayAgain={() => router.push('/quizzes')}

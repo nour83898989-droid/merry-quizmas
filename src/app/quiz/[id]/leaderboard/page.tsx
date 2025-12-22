@@ -9,6 +9,8 @@ interface LeaderboardEntry {
   rank: number;
   wallet: string;
   username?: string;
+  fid?: number;
+  pfpUrl?: string;
   completionTimeMs: number;
   rewardAmount: string;
 }
@@ -92,7 +94,7 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
       {/* Header */}
       <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm px-4 py-4 border-b border-foreground/10">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => router.back()}>
+          <Button variant="ghost" size="sm" onClick={() => router.push('/quizzes')}>
             <BackIcon className="w-5 h-5" />
           </Button>
           <div>
@@ -164,6 +166,11 @@ function LeaderboardRow({
     }
   };
 
+  // Display name: username > truncated wallet
+  const displayName = entry.username ? `@${entry.username}` : truncateWallet(entry.wallet);
+  // Show FID if available
+  const fidDisplay = entry.fid ? `FID: ${entry.fid}` : null;
+
   return (
     <Card 
       className={`flex items-center gap-3 ${isTop3 ? 'border-2' : ''}`}
@@ -178,14 +185,28 @@ function LeaderboardRow({
         )}
       </div>
 
-      {/* User info */}
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-foreground truncate">
-          {entry.username || truncateWallet(entry.wallet)}
-        </p>
-        <p className="text-xs text-foreground-muted">
-          {formatTime(entry.completionTimeMs)}
-        </p>
+      {/* User info with PFP */}
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+        {entry.pfpUrl ? (
+          <img 
+            src={entry.pfpUrl} 
+            alt={entry.username || 'User'} 
+            className="w-8 h-8 rounded-full object-cover border border-foreground/20"
+          />
+        ) : (
+          <div className="w-8 h-8 rounded-full bg-surface flex items-center justify-center">
+            <span className="text-xs text-foreground-muted">👤</span>
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className="font-medium text-foreground truncate">
+            {displayName}
+          </p>
+          <p className="text-xs text-foreground-muted">
+            {formatTime(entry.completionTimeMs)}
+            {fidDisplay && <span className="ml-2 opacity-60">• {fidDisplay}</span>}
+          </p>
+        </div>
       </div>
 
       {/* Reward */}

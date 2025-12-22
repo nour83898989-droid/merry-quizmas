@@ -135,6 +135,8 @@ export default function QuizDetailPage({ params }: { params: Promise<{ id: strin
       const data = await res.json();
       
       // Store session data for play page
+      // Convert token address to display name for share functionality
+      const tokenDisplayName = getTokenDisplayName(quiz.reward_token);
       const sessionData = {
         sessionId: data.sessionId,
         quizId: id,
@@ -142,7 +144,7 @@ export default function QuizDetailPage({ params }: { params: Promise<{ id: strin
         questions: data.questions,
         timePerQuestion: data.timePerQuestion,
         rewardPerWinner: quiz.reward_per_winner,
-        rewardToken: quiz.reward_token,
+        rewardToken: tokenDisplayName,
       };
       sessionStorage.setItem(`quiz-session-${data.sessionId}`, JSON.stringify(sessionData));
       // Store wallet address for API calls in play page

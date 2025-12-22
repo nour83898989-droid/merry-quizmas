@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/client';
+import { getTokenDisplayName } from '@/lib/web3/config';
 import type { Question } from '@/lib/quiz/types';
 
 // Force dynamic rendering
@@ -17,6 +18,7 @@ interface QuizDetail {
   time_per_question: number;
   reward_per_winner: string;
   reward_token: string;
+  reward_token_address?: string;
   remaining_spots: number;
   total_spots: number;
   ends_at: string | null;
@@ -96,18 +98,19 @@ export async function GET(
       question_count: questionsWithoutAnswers.length,
       time_per_question: quiz.time_per_question,
       reward_per_winner: rewardPerWinner,
-      reward_token: quiz.reward_token,
+      reward_token: getTokenDisplayName(quiz.reward_token),
+      reward_token_address: quiz.reward_token,
       remaining_spots: remainingSpots,
       total_spots: quiz.winner_limit,
       ends_at: quiz.end_time,
       stake_required: quiz.stake_token && quiz.stake_amount
-        ? { token: quiz.stake_token, amount: quiz.stake_amount }
+        ? { token: getTokenDisplayName(quiz.stake_token), amount: quiz.stake_amount }
         : null,
       questions: questionsWithoutAnswers,
       reward_pools: rewardPools,
       total_pool_amount: String(quiz.total_pool_amount ?? quiz.reward_amount),
       entry_fee: quiz.entry_fee || null,
-      entry_fee_token: quiz.entry_fee_token || null,
+      entry_fee_token: quiz.entry_fee_token ? getTokenDisplayName(quiz.entry_fee_token) : null,
       contract_quiz_id: quiz.contract_quiz_id || null,
     };
 

@@ -210,7 +210,7 @@ export default function PollDetailPage({
         {/* Header */}
         <header className="px-4 py-4 border-b border-foreground/10 bg-background/80 backdrop-blur-sm">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => router.back()}>
+            <Button variant="ghost" size="sm" onClick={() => router.push('/')}>
               <BackIcon className="w-5 h-5" />
             </Button>
             <span className="text-2xl">📊</span>

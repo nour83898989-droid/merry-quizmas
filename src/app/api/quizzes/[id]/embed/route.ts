@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/client';
+import { getTokenDisplayName } from '@/lib/web3/config';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -25,6 +26,9 @@ export async function GET(
   const rewardPerWinner = quiz.winner_limit > 0 
     ? (Number(quiz.reward_amount) / quiz.winner_limit).toFixed(2)
     : '0';
+  
+  // Convert token address to display name
+  const tokenDisplayName = getTokenDisplayName(quiz.reward_token);
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://merry-quizmas.vercel.app';
 
@@ -34,7 +38,7 @@ export async function GET(
     imageUrl: `${baseUrl}/api/quizzes/${id}/og-image`,
     imageAspectRatio: '3:2',
     title: quiz.title,
-    description: quiz.description || `Win ${rewardPerWinner} ${quiz.reward_token || 'tokens'}!`,
+    description: quiz.description || `Win ${rewardPerWinner} ${tokenDisplayName}!`,
     button: {
       title: 'Play Quiz',
       action: {

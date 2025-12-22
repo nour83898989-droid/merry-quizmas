@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/client';
 import { validateQuizConfig } from '@/lib/quiz/validation';
 import { serializeQuestions } from '@/lib/quiz/serialization';
+import { getTokenDisplayName } from '@/lib/web3/config';
 import type { Question } from '@/lib/quiz/types';
 import type { Json } from '@/lib/supabase/types';
 
@@ -44,11 +45,12 @@ export async function GET() {
   try {
     const supabase = createServerClient();
     
-    // Query active quizzes
+    // Query active quizzes that have been properly funded (have deposit_tx_hash)
     const { data: quizzes, error } = await supabase
       .from('quizzes')
       .select('*')
       .eq('status', 'active')
+      .not('deposit_tx_hash', 'is', null)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -84,18 +86,18 @@ export async function GET() {
         title: quiz.title,
         description: quiz.description,
         questionCount,
-        rewardToken: quiz.reward_token,
+        rewardToken: getTokenDisplayName(quiz.reward_token),
         rewardPerWinner,
         remainingSpots,
         timePerQuestion: quiz.time_per_question,
         endsAt: quiz.end_time,
         stakeRequired: quiz.stake_token && quiz.stake_amount
-          ? { token: quiz.stake_token, amount: quiz.stake_amount }
+          ? { token: getTokenDisplayName(quiz.stake_token), amount: quiz.stake_amount }
           : null,
         rewardPools,
         totalPoolAmount: String(quiz.total_pool_amount ?? quiz.reward_amount),
         entryFee: quiz.entry_fee || null,
-        entryFeeToken: quiz.entry_fee_token || null,
+        entryFeeToken: quiz.entry_fee_token ? getTokenDisplayName(quiz.entry_fee_token) : null,
       };
     });
 
@@ -121,8 +123,11 @@ interface CreateQuizRequest {
   rewardAmount: string;
   winnerLimit: number;
   timePerQuestion?: number;
+  // Support both field names for compatibility
   startTime?: string;
+  startsAt?: string;
   endTime?: string;
+  endsAt?: string;
   stakeToken?: string;
   stakeAmount?: string;
   nftEnabled?: boolean;
@@ -160,6 +165,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Normalize field names (support both startsAt/endsAt and startTime/endTime)
+    const startTime = body.startTime || body.startsAt || null;
+    const endTime = body.endTime || body.endsAt || null;
+
     // Generate IDs for questions
     const questionsWithIds: Question[] = body.questions.map((q, index) => ({
       id: `q${index + 1}-${Date.now()}`,
@@ -177,8 +186,8 @@ export async function POST(request: NextRequest) {
       rewardAmount: body.rewardAmount,
       winnerLimit: body.winnerLimit,
       timePerQuestion: body.timePerQuestion || 15,
-      startTime: body.startTime,
-      endTime: body.endTime,
+      startTime: startTime || undefined,
+      endTime: endTime || undefined,
       stakeRequirement: body.stakeToken && body.stakeAmount
         ? { token: body.stakeToken, amount: body.stakeAmount }
         : undefined,
@@ -207,8 +216,8 @@ export async function POST(request: NextRequest) {
         reward_amount: parseInt(body.rewardAmount) || 0,
         winner_limit: body.winnerLimit,
         time_per_question: body.timePerQuestion || 15,
-        start_time: body.startTime || null,
-        end_time: body.endTime || null,
+        start_time: startTime,
+        end_time: endTime,
         stake_token: body.stakeToken || null,
         stake_amount: body.stakeAmount ? parseInt(body.stakeAmount) : null,
         nft_enabled: body.nftEnabled || false,

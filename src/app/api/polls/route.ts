@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
     const {
       creatorFid,
       creatorAddress,
+      creatorWallet, // Support both field names
       title,
       description,
       options,
@@ -56,6 +57,9 @@ export async function POST(request: NextRequest) {
       requireToken,
       requireTokenAmount,
     } = body;
+    
+    // Normalize creator address (support both field names)
+    const walletAddress = creatorAddress || creatorWallet || null;
 
     // Validation
     if (!creatorFid || !title || !options || options.length < 2) {
@@ -76,7 +80,7 @@ export async function POST(request: NextRequest) {
       .from('polls')
       .insert({
         creator_fid: creatorFid,
-        creator_address: creatorAddress,
+        creator_address: walletAddress,
         title,
         description,
         options: options.map((opt: string, idx: number) => ({
@@ -93,13 +97,16 @@ export async function POST(request: NextRequest) {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Supabase error creating poll:', error);
+      throw error;
+    }
 
     return NextResponse.json({ poll }, { status: 201 });
   } catch (error) {
     console.error('Error creating poll:', error);
     return NextResponse.json(
-      { error: 'Failed to create poll' },
+      { error: 'Failed to create poll', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }

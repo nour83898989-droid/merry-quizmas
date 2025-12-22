@@ -104,13 +104,17 @@ export default function CreateQuizPage() {
     if (step > 0) setStep(step - 1);
   };
 
+  const [publishError, setPublishError] = useState<string | null>(null);
+
   const handlePublish = async () => {
     if (!isConnected || !walletAddress) {
-      alert('Please connect your wallet first');
+      setPublishError('Please connect your wallet first');
       return;
     }
     
     setIsSubmitting(true);
+    setPublishError(null);
+    
     try {
       // Calculate total winners from pools
       const totalWinners = form.rewardPools.reduce((sum, p) => sum + p.winnerCount, 0);
@@ -121,13 +125,15 @@ export default function CreateQuizPage() {
       const stakeToken = form.stakeToken ? getTokenByAddress(form.stakeToken) : null;
 
       if (!rewardToken) {
-        alert('Invalid reward token selected');
+        setPublishError('Invalid reward token selected');
         setIsSubmitting(false);
         return;
       }
 
       // Generate a unique quiz ID for the contract
       const quizIdForContract = `quiz_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+
+      console.log('[CreateQuiz] Starting onchain creation...', { quizIdForContract, rewardToken: form.rewardToken, amount: form.rewardAmount });
 
       // Step 1: Create quiz on blockchain (deposits reward tokens)
       const txResult = await createQuizOnChain(
@@ -145,22 +151,28 @@ export default function CreateQuizPage() {
       );
 
       if (!txResult.success) {
-        alert(txResult.error || 'Failed to create quiz on blockchain');
+        console.error('[CreateQuiz] Onchain creation failed:', txResult.error);
+        setPublishError(txResult.error || 'Failed to create quiz on blockchain');
         setIsSubmitting(false);
         return;
       }
 
+      console.log('[CreateQuiz] Transaction sent:', txResult.txHash);
+
       // Wait for transaction to be mined
       if (txResult.txHash) {
+        console.log('[CreateQuiz] Waiting for confirmation...');
         const confirmed = await waitForTransaction(txResult.txHash);
         if (!confirmed) {
-          alert('Transaction failed or timed out');
+          setPublishError('Transaction failed or timed out. Check your wallet for details.');
           setIsSubmitting(false);
           return;
         }
+        console.log('[CreateQuiz] Transaction confirmed!');
       }
 
       // Step 2: Save quiz to database with contract info
+      console.log('[CreateQuiz] Saving to database...');
       const res = await fetch('/api/quizzes', {
         method: 'POST',
         headers: { 
@@ -196,12 +208,18 @@ export default function CreateQuizPage() {
         }),
       });
 
-      if (!res.ok) throw new Error('Failed to save quiz to database');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        console.error('[CreateQuiz] Database save failed:', errorData);
+        throw new Error(errorData.message || 'Failed to save quiz to database');
+      }
       const data = await res.json();
+      console.log('[CreateQuiz] Quiz created successfully:', data.quiz.id);
       router.push(`/quiz/${data.quiz.id}`);
     } catch (error) {
-      console.error('Failed to publish quiz:', error);
-      alert('Failed to publish quiz. Please try again.');
+      console.error('[CreateQuiz] Failed to publish quiz:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to publish quiz. Please try again.';
+      setPublishError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -210,6 +228,25 @@ export default function CreateQuizPage() {
   return (
     <ChristmasLayout>
       <main className="min-h-screen pb-24">
+        {/* Error Banner */}
+        {publishError && (
+          <div className="mx-4 mt-4 p-3 rounded-lg bg-error/10 border border-error/30">
+            <div className="flex items-start gap-2">
+              <span className="text-error flex-shrink-0">❌</span>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-error">Failed to create quiz</p>
+                <p className="text-xs text-foreground-muted mt-1">{publishError}</p>
+              </div>
+              <button 
+                onClick={() => setPublishError(null)}
+                className="text-foreground-muted hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Progress Header */}
         <div className="px-4 py-4 border-b border-foreground/10 bg-background/50">
           <div className="flex items-center gap-2 mb-4">

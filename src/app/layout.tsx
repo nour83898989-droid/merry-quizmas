@@ -49,7 +49,7 @@ export async function generateMetadata(): Promise<Metadata> {
     other: {
       "fc:miniapp": JSON.stringify({
         version: "next",
-        imageUrl: `${baseUrl}/christmas-banner.png`,
+        imageUrl: `${baseUrl}/heroimage.png`,
         button: {
           title: "🎄 Play Quiz",
           action: {

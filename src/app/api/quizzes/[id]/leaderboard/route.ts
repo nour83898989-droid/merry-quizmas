@@ -4,6 +4,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/client';
+import { getTokenDisplayName } from '@/lib/web3/config';
+
+// Neynar API for user lookup
+const NEYNAR_API_KEY = process.env.NEYNAR_API_KEY || process.env.NEXT_PUBLIC_NEYNAR_API_KEY || 'NEYNAR_API_DOCS';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -12,8 +16,28 @@ interface LeaderboardEntry {
   rank: number;
   wallet: string;
   username: string | null;
+  fid: number | null;
+  pfpUrl: string | null;
   completionTimeMs: number;
   rewardAmount: number;
+}
+
+// Lookup user info from FID via Neynar
+async function getUserInfoByFid(fid: number): Promise<{ username: string; pfpUrl: string } | null> {
+  try {
+    const response = await fetch(`https://api.neynar.com/v2/farcaster/user/bulk?fids=${fid}`, {
+      headers: { 'accept': 'application/json', 'api_key': NEYNAR_API_KEY }
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const user = data?.users?.[0];
+    if (user) {
+      return { username: user.username, pfpUrl: user.pfp_url };
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -58,20 +82,42 @@ export async function GET(
       );
     }
 
-    // Transform to response format
-    const entries: LeaderboardEntry[] = (winners || []).map((winner, index) => ({
-      rank: index + 1,
-      wallet: winner.wallet_address,
-      username: winner.username,
-      completionTimeMs: winner.completion_time_ms,
-      rewardAmount: winner.reward_amount,
-    }));
+    // Transform to response format with user info lookup
+    const entries: LeaderboardEntry[] = await Promise.all(
+      (winners || []).map(async (winner, index) => {
+        let username = winner.username;
+        let pfpUrl: string | null = null;
+        
+        // If we have FID but no username, lookup from Neynar
+        if (winner.user_fid && !username) {
+          const userInfo = await getUserInfoByFid(winner.user_fid);
+          if (userInfo) {
+            username = userInfo.username;
+            pfpUrl = userInfo.pfpUrl;
+          }
+        }
+        
+        return {
+          rank: index + 1,
+          wallet: winner.wallet_address,
+          username,
+          fid: winner.user_fid,
+          pfpUrl,
+          completionTimeMs: winner.completion_time_ms,
+          rewardAmount: winner.reward_amount,
+        };
+      })
+    );
+
+    // Convert token address to display name
+    const tokenDisplayName = getTokenDisplayName(quiz.reward_token);
 
     return NextResponse.json({ 
       quizTitle: quiz.title,
       entries,
       totalWinners: quiz.current_winners || entries.length,
-      rewardToken: quiz.reward_token,
+      rewardToken: tokenDisplayName,
+      rewardTokenAddress: quiz.reward_token,
     });
   } catch (error) {
     console.error('Unexpected error in GET /api/quizzes/:id/leaderboard:', error);

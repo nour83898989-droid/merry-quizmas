@@ -3,11 +3,11 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useAccount, useDisconnect } from 'wagmi';
+import { useAccount, useDisconnect, useSwitchChain } from 'wagmi';
 import { ConnectButton } from '@/components/wallet/connect-button';
 import { useFarcaster } from '@/components/providers/farcaster-provider';
 import { IS_TESTNET, BASE_CHAIN_ID, BASE_SEPOLIA_CHAIN_ID } from '@/lib/web3/config';
-import { getCurrentNetwork, switchToBase, switchToBaseMainnet, switchToBaseSepolia } from '@/lib/web3/client';
+import { getCurrentNetwork, switchToBase } from '@/lib/web3/client';
 
 // Chain options
 const CHAINS = [
@@ -17,9 +17,10 @@ const CHAINS = [
 
 export function Navbar() {
   const pathname = usePathname();
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId: wagmiChainId } = useAccount();
   const { disconnect } = useDisconnect();
-  const { user: farcasterUser, isReady } = useFarcaster();
+  const { switchChain } = useSwitchChain();
+  const { user: farcasterUser, isReady, isInMiniApp } = useFarcaster();
   
   const [isCorrectNetwork, setIsCorrectNetwork] = useState(true);
   const [currentChainId, setCurrentChainId] = useState<number | null>(null);
@@ -31,14 +32,23 @@ export function Navbar() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const chainDropdownRef = useRef<HTMLDivElement>(null);
 
+  const expectedChainId = IS_TESTNET ? BASE_SEPOLIA_CHAIN_ID : BASE_CHAIN_ID;
   const currentChain = CHAINS.find(c => c.id === currentChainId) || CHAINS[IS_TESTNET ? 1 : 0];
 
-  // Check network when connected
+  // Sync chainId from wagmi (works in both browser and MiniApp)
   useEffect(() => {
-    if (isConnected) {
+    if (wagmiChainId) {
+      setCurrentChainId(wagmiChainId);
+      setIsCorrectNetwork(wagmiChainId === expectedChainId);
+    }
+  }, [wagmiChainId, expectedChainId]);
+
+  // Fallback: Check network via window.ethereum (browser only)
+  useEffect(() => {
+    if (isConnected && !wagmiChainId) {
       checkNetwork();
     }
-  }, [isConnected]);
+  }, [isConnected, wagmiChainId]);
 
   // Check admin status when address or farcasterUser changes (with debounce)
   useEffect(() => {
@@ -53,16 +63,16 @@ export function Navbar() {
     }
   }, [address, farcasterUser?.fid]);
 
-  // Listen for network changes
+  // Listen for network changes (browser only fallback)
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.ethereum) {
+    if (typeof window !== 'undefined' && window.ethereum && !isInMiniApp) {
       const handleChainChanged = () => checkNetwork();
       window.ethereum.on?.('chainChanged', handleChainChanged);
       return () => {
         window.ethereum?.removeListener?.('chainChanged', handleChainChanged);
       };
     }
-  }, []);
+  }, [isInMiniApp]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -106,19 +116,32 @@ export function Navbar() {
   };
 
   const handleSwitchNetwork = async () => {
-    const success = await switchToBase();
-    if (success) setIsCorrectNetwork(true);
+    // Use wagmi switchChain for MiniApp compatibility
+    if (switchChain) {
+      try {
+        switchChain({ chainId: expectedChainId });
+      } catch (e) {
+        console.error('Failed to switch chain via wagmi:', e);
+        // Fallback to direct provider call
+        const success = await switchToBase();
+        if (success) setIsCorrectNetwork(true);
+      }
+    } else {
+      const success = await switchToBase();
+      if (success) setIsCorrectNetwork(true);
+    }
   };
 
   const handleSwitchChain = async (chainId: number) => {
     setIsSwitchingChain(true);
     setChainDropdownOpen(false);
     try {
-      if (chainId === BASE_CHAIN_ID) {
-        await switchToBaseMainnet();
-      } else {
-        await switchToBaseSepolia();
+      // Use wagmi switchChain - works in both browser and MiniApp
+      if (switchChain) {
+        switchChain({ chainId });
       }
+    } catch (e) {
+      console.error('Failed to switch chain:', e);
     } finally {
       setIsSwitchingChain(false);
     }

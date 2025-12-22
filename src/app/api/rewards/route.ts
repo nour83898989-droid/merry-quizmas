@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/client';
 import { getAuthFromRequest } from '@/lib/auth/middleware';
+import { getTokenDisplayName } from '@/lib/web3/config';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -98,7 +99,7 @@ export async function GET(request: NextRequest) {
         quizId: claim.quiz_id,
         quizTitle: quiz?.title || 'Unknown Quiz',
         amount: claim.reward_amount,
-        token: quiz?.reward_token || 'tokens',
+        token: quiz?.reward_token ? getTokenDisplayName(quiz.reward_token) : 'tokens',
         rank: 0, // Will be updated from winners
         poolTier: claim.pool_tier,
         rankInPool: claim.rank_in_pool,
@@ -124,7 +125,7 @@ export async function GET(request: NextRequest) {
           quizId: winner.quiz_id || '',
           quizTitle: quiz?.title || 'Unknown Quiz',
           amount: winner.reward_amount,
-          token: quiz?.reward_token || 'tokens',
+          token: quiz?.reward_token ? getTokenDisplayName(quiz.reward_token) : 'tokens',
           rank: winner.rank,
           poolTier: 0,
           rankInPool: 0,
