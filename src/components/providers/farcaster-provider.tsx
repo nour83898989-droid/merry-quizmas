@@ -27,6 +27,8 @@ const config = createConfig({
 interface FarcasterContextType {
   isReady: boolean;
   isInMiniApp: boolean;
+  activeChain: typeof base | typeof baseSepolia;
+  isTestnet: boolean;
   user: {
     fid?: number;
     username?: string;
@@ -38,6 +40,8 @@ interface FarcasterContextType {
 const FarcasterContext = createContext<FarcasterContextType>({
   isReady: false,
   isInMiniApp: false,
+  activeChain: activeChain,
+  isTestnet: IS_TESTNET,
   user: null,
 });
 
@@ -101,8 +105,8 @@ function FarcasterInitializer({
         isInMiniApp = await sdk.isInMiniApp().catch(() => false);
         
         if (isInMiniApp) {
-          // Get user context
-          const ctx = sdk.context;
+          // Get user context - sdk.context is a Promise
+          const ctx = await sdk.context;
           if (ctx?.user) {
             user = {
               fid: ctx.user.fid,
@@ -146,6 +150,8 @@ export function FarcasterProvider({ children }: { children: ReactNode }) {
   const contextValue = useMemo(() => ({
     isReady,
     isInMiniApp,
+    activeChain,
+    isTestnet: IS_TESTNET,
     user,
   }), [isReady, isInMiniApp, user]);
 

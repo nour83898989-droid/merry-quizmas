@@ -57,7 +57,7 @@ async function getSDK(): Promise<FarcasterSDK> {
   if (sdk) return sdk;
   
   // Dynamic import of Farcaster SDK
-  const { default: farcasterSDK } = await import('@farcaster/frame-sdk');
+  const { sdk: farcasterSDK } = await import('@farcaster/miniapp-sdk');
   sdk = farcasterSDK as unknown as FarcasterSDK;
   return sdk;
 }
