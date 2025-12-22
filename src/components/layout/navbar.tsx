@@ -96,6 +96,7 @@ export function Navbar() {
     { href: '/polls', label: 'Polls', icon: '📊' },
     { href: '/create', label: 'Create', icon: '✨' },
     { href: '/claim', label: 'Rewards', icon: '🎁' },
+    { href: '/profile', label: 'Profile', icon: '👤' },
   ];
 
   return (

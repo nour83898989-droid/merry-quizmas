@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAccount } from 'wagmi';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ChristmasLayout } from '@/components/christmas/christmas-layout';
@@ -9,7 +10,6 @@ import { Gift, ChristmasTree, Santa } from '@/components/christmas/decorations';
 import { getCurrentNetwork, switchToBase, getAllTokenBalances, TokenBalance } from '@/lib/web3/client';
 import { ACTIVE_CHAIN_ID, IS_TESTNET, getTokenByAddress } from '@/lib/web3/config';
 import { claimRewardOnChain, waitForTransaction, getClaimableReward } from '@/lib/web3/transactions';
-import { fetchUserByAddress, type FarcasterUserData } from '@/lib/neynar/client';
 
 interface ClaimableReward {
   id: string;
@@ -27,7 +27,7 @@ interface ClaimableReward {
 
 export default function ClaimPage() {
   const router = useRouter();
-  const [address, setAddress] = useState<string | null>(null);
+  const { address, isConnected } = useAccount();
   const [rewards, setRewards] = useState<ClaimableReward[]>([]);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState<string | null>(null);
@@ -45,27 +45,21 @@ export default function ClaimPage() {
   }, []);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.ethereum) {
-      window.ethereum.request({ method: 'eth_accounts' }).then((accounts: unknown) => {
-        const accs = accounts as string[];
-        if (accs && accs.length > 0) {
-          setAddress(accs[0]);
-          fetchRewards(accs[0]);
-          fetchTokenBalances(accs[0]);
-          checkNetwork();
-        } else {
-          setLoading(false);
-        }
-      });
-
-      // Listen for network changes
-      window.ethereum.on?.('chainChanged', () => {
-        checkNetwork();
-      });
+    if (isConnected && address) {
+      fetchRewards(address);
+      fetchTokenBalances(address);
+      checkNetwork();
     } else {
       setLoading(false);
     }
-  }, [checkNetwork]);
+
+    // Listen for network changes
+    if (typeof window !== 'undefined' && window.ethereum) {
+      window.ethereum.on?.('chainChanged', () => {
+        checkNetwork();
+      });
+    }
+  }, [isConnected, address, checkNetwork]);
 
   const fetchRewards = async (walletAddress: string) => {
     try {

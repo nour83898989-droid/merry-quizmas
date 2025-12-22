@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAccount } from 'wagmi';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -33,7 +34,7 @@ interface AdminUser {
 
 export default function AdminPage() {
   const router = useRouter();
-  const [address, setAddress] = useState<string | null>(null);
+  const { address, isConnected } = useAccount();
   const [role, setRole] = useState<string | null>(null);
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -72,20 +73,12 @@ export default function AdminPage() {
   }, [router]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.ethereum) {
-      window.ethereum.request({ method: 'eth_accounts' }).then((accounts: unknown) => {
-        const accs = accounts as string[];
-        if (accs?.[0]) {
-          setAddress(accs[0]);
-          fetchAdminData(accs[0]);
-        } else {
-          router.push('/');
-        }
-      });
+    if (isConnected && address) {
+      fetchAdminData(address);
     } else {
       router.push('/');
     }
-  }, [fetchAdminData, router]);
+  }, [isConnected, address, fetchAdminData, router]);
 
   const handleAction = async (action: string, data: Record<string, unknown>) => {
     if (!address) return;

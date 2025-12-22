@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAccount } from 'wagmi';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -55,9 +56,9 @@ const STEPS = ['Basic Info', 'Questions', 'Rewards', 'Settings', 'Preview'];
 
 export default function CreateQuizPage() {
   const router = useRouter();
+  const { address: walletAddress, isConnected } = useAccount();
   const [step, setStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [form, setForm] = useState<QuizForm>({
     title: '',
     description: '',
@@ -77,27 +78,6 @@ export default function CreateQuizPage() {
     entryFeeToken: '',
   });
 
-  // Get wallet address from window.ethereum
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.ethereum) {
-      window.ethereum.request({ method: 'eth_accounts' }).then((accounts: unknown) => {
-        const accs = accounts as string[];
-        if (accs && accs.length > 0) {
-          setWalletAddress(accs[0]);
-        }
-      });
-
-      window.ethereum.on?.('accountsChanged', (accounts: unknown) => {
-        const accs = accounts as string[];
-        if (accs && accs.length > 0) {
-          setWalletAddress(accs[0]);
-        } else {
-          setWalletAddress(null);
-        }
-      });
-    }
-  }, []);
-
   const updateForm = (updates: Partial<QuizForm>) => {
     setForm(prev => ({ ...prev, ...updates }));
   };
@@ -111,7 +91,7 @@ export default function CreateQuizPage() {
       case 2: return form.rewardToken.trim() && parseFloat(form.rewardAmount) > 0 && 
         (form.useCustomPools ? form.rewardPools.reduce((sum, p) => sum + p.percentage, 0) === 100 : true);
       case 3: return form.winnerLimit > 0 && form.timePerQuestion >= 10;
-      case 4: return walletAddress !== null; // Must connect wallet to publish
+      case 4: return isConnected && !!walletAddress; // Must connect wallet to publish
       default: return true;
     }
   };
@@ -125,7 +105,7 @@ export default function CreateQuizPage() {
   };
 
   const handlePublish = async () => {
-    if (!walletAddress) {
+    if (!isConnected || !walletAddress) {
       alert('Please connect your wallet first');
       return;
     }
@@ -257,9 +237,9 @@ export default function CreateQuizPage() {
       <div className="p-4">
         {step === 0 && <BasicInfoStep form={form} updateForm={updateForm} />}
         {step === 1 && <QuestionsStep form={form} updateForm={updateForm} />}
-        {step === 2 && <RewardsStep form={form} updateForm={updateForm} walletAddress={walletAddress} />}
-        {step === 3 && <SettingsStep form={form} updateForm={updateForm} walletAddress={walletAddress} />}
-        {step === 4 && <PreviewStep form={form} walletConnected={!!walletAddress} />}
+        {step === 2 && <RewardsStep form={form} updateForm={updateForm} walletAddress={walletAddress ?? null} />}
+        {step === 3 && <SettingsStep form={form} updateForm={updateForm} walletAddress={walletAddress ?? null} />}
+        {step === 4 && <PreviewStep form={form} walletConnected={isConnected} />}
       </div>
 
       {/* Footer */}

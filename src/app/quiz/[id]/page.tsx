@@ -2,10 +2,10 @@
 
 import { useState, useEffect, use, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAccount } from 'wagmi';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ChristmasLayout } from '@/components/christmas/christmas-layout';
-import { ConnectButton } from '@/components/wallet/connect-button';
 import { joinQuizOnChain, waitForTransaction, hasJoinedQuiz } from '@/lib/web3/transactions';
 import { getTokenByAddress, getTokenDisplayName, IS_TESTNET } from '@/lib/web3/config';
 
@@ -38,16 +38,11 @@ interface Quiz {
 export default function QuizDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const { address: walletAddress, isConnected } = useAccount();
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
-
-  const handleWalletConnect = (address: string) => {
-    setWalletAddress(address);
-    sessionStorage.setItem('wallet-address', address);
-  };
 
   const fetchQuiz = useCallback(async () => {
     try {
@@ -70,7 +65,7 @@ export default function QuizDetailPage({ params }: { params: Promise<{ id: strin
   async function handleStart() {
     if (!quiz) return;
     
-    if (!walletAddress) {
+    if (!isConnected || !walletAddress) {
       setError('Please connect your wallet first');
       return;
     }
@@ -200,7 +195,7 @@ export default function QuizDetailPage({ params }: { params: Promise<{ id: strin
             <BackIcon className="w-5 h-5 mr-2" />
             Back
           </Button>
-          <ConnectButton onConnect={handleWalletConnect} />
+          {/* Wallet status shown in navbar */}
         </div>
       </header>
 
@@ -322,11 +317,11 @@ export default function QuizDetailPage({ params }: { params: Promise<{ id: strin
         )}
 
         {/* Wallet Warning */}
-        {!walletAddress && (
+        {!isConnected && (
           <Card className="bg-primary/10 border-primary/30">
             <div className="flex items-center gap-2 text-primary">
               <AlertIcon className="w-5 h-5" />
-              <span className="font-medium">Connect your wallet to start the quiz</span>
+              <span className="font-medium">Connect your wallet in the header to start the quiz</span>
             </div>
           </Card>
         )}
@@ -338,10 +333,10 @@ export default function QuizDetailPage({ params }: { params: Promise<{ id: strin
           onClick={handleStart} 
           fullWidth 
           isLoading={starting}
-          disabled={quiz.remaining_spots === 0 || !walletAddress}
+          disabled={quiz.remaining_spots === 0 || !isConnected}
           className="christmas-gradient text-white"
         >
-          {quiz.remaining_spots === 0 ? 'No Spots Available' : !walletAddress ? '🔗 Connect Wallet First' : '🎄 Start Quiz'}
+          {quiz.remaining_spots === 0 ? 'No Spots Available' : !isConnected ? '🔗 Connect Wallet First' : '� Starat Quiz'}
         </Button>
       </div>
     </main>

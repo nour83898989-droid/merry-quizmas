@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAccount } from 'wagmi';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ChristmasLayout } from '@/components/christmas/christmas-layout';
@@ -9,6 +10,7 @@ import { Gift, Santa } from '@/components/christmas/decorations';
 import { getAllTokenBalances, TokenBalance } from '@/lib/web3/client';
 import { IS_TESTNET } from '@/lib/web3/config';
 import { fetchUserByAddress, type FarcasterUserData } from '@/lib/neynar/client';
+import { useFarcaster } from '@/components/providers/farcaster-provider';
 
 interface UserStats {
   totalQuizzes: number;
@@ -27,8 +29,8 @@ interface RecentActivity {
 
 export default function ProfilePage() {
   const router = useRouter();
-  const [address, setAddress] = useState<string | null>(null);
-  const [farcasterUser, setFarcasterUser] = useState<FarcasterUserData | null>(null);
+  const { address, isConnected } = useAccount();
+  const { user: farcasterUser } = useFarcaster();
   const [stats, setStats] = useState<UserStats>({
     totalQuizzes: 0,
     totalWins: 0,
@@ -41,30 +43,13 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for connected wallet
-    if (typeof window !== 'undefined' && window.ethereum) {
-      window.ethereum.request({ method: 'eth_accounts' }).then(async (accounts: unknown) => {
-        const accs = accounts as string[];
-        if (accs && accs.length > 0) {
-          setAddress(accs[0]);
-          fetchUserData(accs[0]);
-          fetchTokenBalances(accs[0]);
-          
-          // Lookup Farcaster user
-          try {
-            const fcUser = await fetchUserByAddress(accs[0]);
-            setFarcasterUser(fcUser);
-          } catch (e) {
-            console.warn('Failed to fetch Farcaster user:', e);
-          }
-        } else {
-          setLoading(false);
-        }
-      });
+    if (isConnected && address) {
+      fetchUserData(address);
+      fetchTokenBalances(address);
     } else {
       setLoading(false);
     }
-  }, []);
+  }, [isConnected, address]);
 
   const fetchTokenBalances = async (walletAddress: string) => {
     setLoadingBalances(true);
