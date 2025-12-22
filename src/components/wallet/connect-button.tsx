@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
-import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
 import { Button } from '@/components/ui/button';
 import { IS_TESTNET } from '@/lib/web3/config';
 import { switchToBase } from '@/lib/web3/client';
@@ -76,10 +75,10 @@ export function ConnectButton({ onConnect }: ConnectButtonProps) {
     const platform = getMiniAppPlatform();
     
     try {
-      // In Farcaster miniapp, use farcasterMiniApp() connector directly
+      // In Farcaster miniapp, use connectors[0] which is farcasterMiniApp (per official docs)
       if (platform === 'farcaster' || isInFarcaster) {
-        console.log('[ConnectButton] Connecting with farcasterMiniApp connector');
-        connect({ connector: farcasterMiniApp() });
+        console.log('[ConnectButton] Connecting with connectors[0]:', connectors[0]?.name);
+        connect({ connector: connectors[0] });
         return;
       }
       
@@ -180,7 +179,7 @@ export function ConnectButton({ onConnect }: ConnectButtonProps) {
           <>
             {/* Browser: show Farcaster + Wallet buttons */}
             <Button
-              onClick={() => connect({ connector: farcasterMiniApp() })}
+              onClick={() => connectors[0] && connect({ connector: connectors[0] })}
               isLoading={isPending}
               variant="secondary"
               size="sm"

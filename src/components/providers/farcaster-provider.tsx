@@ -13,7 +13,7 @@ const activeChain = IS_TESTNET ? baseSepolia : base;
 
 const queryClient = new QueryClient();
 
-// Create wagmi config - connectors added separately for flexibility
+// Create wagmi config with farcasterMiniApp as FIRST connector (per official docs)
 const config = createConfig({
   chains: [base, baseSepolia],
   transports: {
@@ -21,6 +21,7 @@ const config = createConfig({
     [baseSepolia.id]: http(),
   },
   connectors: [
+    farcasterMiniApp(),  // MUST be first - used as connectors[0] for connect
     injected(),
     coinbaseWallet({ appName: 'Merry Quizmas' }),
   ],
@@ -55,21 +56,21 @@ export function useFarcaster() {
 // Export the connector for use in connect buttons
 export { farcasterMiniApp };
 
-// Auto-connect component - connects using farcasterMiniApp connector directly
+// Auto-connect component - uses connectors[0] which is farcasterMiniApp per official docs
 function AutoConnectWallet({ isInMiniApp }: { isInMiniApp: boolean }) {
   const { isConnected } = useAccount();
-  const { connect } = useConnect();
+  const { connect, connectors } = useConnect();
   const [attempted, setAttempted] = useState(false);
   
   useEffect(() => {
     // Only auto-connect once, and only if in mini app
-    if (!isConnected && !attempted && isInMiniApp) {
+    if (!isConnected && !attempted && isInMiniApp && connectors.length > 0) {
       setAttempted(true);
-      console.log('[Farcaster] Auto-connecting wallet...');
-      // Use farcasterMiniApp() directly as per official example
-      connect({ connector: farcasterMiniApp() });
+      console.log('[Farcaster] Auto-connecting with connector:', connectors[0]?.name);
+      // Per official docs: connect({ connector: connectors[0] })
+      connect({ connector: connectors[0] });
     }
-  }, [isConnected, attempted, isInMiniApp, connect]);
+  }, [isConnected, attempted, isInMiniApp, connect, connectors]);
   
   return null;
 }
