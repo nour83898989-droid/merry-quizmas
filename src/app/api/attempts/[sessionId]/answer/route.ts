@@ -78,6 +78,7 @@ export async function POST(
       current_winners: number;
       winner_limit: number;
       reward_amount: string;
+      reward_token: string;
       reward_pools?: {
         tier: number;
         name: string;
@@ -202,7 +203,7 @@ export async function POST(
         .eq('id', quiz.id)
         .single();
 
-      const isWinner = currentQuiz && currentQuiz.current_winners < currentQuiz.winner_limit;
+      const isWinner = currentQuiz && (currentQuiz.current_winners ?? 0) < currentQuiz.winner_limit;
       
       // Calculate reward based on pool tier
       let rewardAmount: string | undefined;
@@ -210,7 +211,7 @@ export async function POST(
       let rankInPool = 0;
       
       if (isWinner && currentQuiz) {
-        const newRank = currentQuiz.current_winners + 1;
+        const newRank = (currentQuiz.current_winners ?? 0) + 1;
         const pools = (currentQuiz.reward_pools as {
           tier: number;
           name: string;
@@ -260,7 +261,7 @@ export async function POST(
 
       // If winner, update quiz and create winner record
       if (isWinner && currentQuiz) {
-        const newWinnerCount = currentQuiz.current_winners + 1;
+        const newWinnerCount = (currentQuiz.current_winners ?? 0) + 1;
 
         await supabase
           .from('quizzes')
@@ -278,7 +279,7 @@ export async function POST(
             user_fid: attempt.user_fid,
             rank: newWinnerCount,
             completion_time_ms: completionTimeMs,
-            reward_amount: rewardAmount || '0',
+            reward_amount: parseInt(rewardAmount || '0'),
           });
 
         // Also create reward_claims record for tracking
@@ -289,8 +290,10 @@ export async function POST(
             wallet_address: attempt.wallet_address,
             user_fid: attempt.user_fid,
             pool_tier: poolTier,
+            rank: newWinnerCount,
             rank_in_pool: rankInPool,
-            reward_amount: rewardAmount || '0',
+            reward_amount: parseInt(rewardAmount || '0'),
+            token_address: quiz.reward_token,
             status: 'pending',
           });
       }
