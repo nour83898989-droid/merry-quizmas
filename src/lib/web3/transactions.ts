@@ -4,6 +4,8 @@
  */
 
 import { ACTIVE_CHAIN_ID, getChainIdHex, isCorrectNetwork, getChainConfig, IS_TESTNET, QUIZ_REWARD_POOL_ADDRESS } from './config';
+import { getWalletClient, getPublicClient } from '@wagmi/core';
+import { wagmiConfig } from '@/components/providers/farcaster-provider';
 
 // ERC20 function selectors
 const TRANSFER_SELECTOR = '0xa9059cbb'; // transfer(address,uint256)
@@ -22,6 +24,97 @@ export interface TransactionResult {
   success: boolean;
   txHash?: string;
   error?: string;
+}
+
+/**
+ * Get wallet provider - tries wagmi first, falls back to window.ethereum
+ */
+async function getWalletProvider(): Promise<{ request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } | null> {
+  // Try wagmi wallet client first (works in Farcaster mini app)
+  try {
+    const walletClient = await getWalletClient(wagmiConfig);
+    if (walletClient) {
+      return {
+        request: async ({ method, params }) => {
+          // Map common methods to viem wallet client
+          if (method === 'eth_sendTransaction' && params?.[0]) {
+            const tx = params[0] as { from: string; to: string; data?: string; value?: string };
+            const hash = await walletClient.sendTransaction({
+              account: tx.from as `0x${string}`,
+              to: tx.to as `0x${string}`,
+              data: tx.data as `0x${string}` | undefined,
+              value: tx.value ? BigInt(tx.value) : undefined,
+            });
+            return hash;
+          }
+          if (method === 'eth_chainId') {
+            return `0x${walletClient.chain.id.toString(16)}`;
+          }
+          // For other methods, try window.ethereum as fallback
+          if (typeof window !== 'undefined' && window.ethereum) {
+            return window.ethereum.request({ method, params });
+          }
+          throw new Error(`Method ${method} not supported`);
+        }
+      };
+    }
+  } catch (e) {
+    console.log('[Transactions] Wagmi wallet client not available:', e);
+  }
+  
+  // Fallback to window.ethereum (browser wallets)
+  if (typeof window !== 'undefined' && window.ethereum) {
+    return window.ethereum;
+  }
+  
+  return null;
+}
+
+/**
+ * Get public client for read-only calls
+ */
+async function getProvider(): Promise<{ request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } | null> {
+  // Try wagmi public client first
+  try {
+    const publicClient = getPublicClient(wagmiConfig);
+    if (publicClient) {
+      return {
+        request: async ({ method, params }) => {
+          if (method === 'eth_call' && params) {
+            const [callParams, block] = params as [{ to: string; data: string }, string];
+            const result = await publicClient.call({
+              to: callParams.to as `0x${string}`,
+              data: callParams.data as `0x${string}`,
+            });
+            return result.data;
+          }
+          if (method === 'eth_getTransactionReceipt' && params?.[0]) {
+            const receipt = await publicClient.getTransactionReceipt({
+              hash: params[0] as `0x${string}`,
+            });
+            return receipt;
+          }
+          if (method === 'eth_chainId') {
+            return `0x${publicClient.chain.id.toString(16)}`;
+          }
+          // Fallback to window.ethereum
+          if (typeof window !== 'undefined' && window.ethereum) {
+            return window.ethereum.request({ method, params });
+          }
+          throw new Error(`Method ${method} not supported`);
+        }
+      };
+    }
+  } catch (e) {
+    console.log('[Transactions] Wagmi public client not available:', e);
+  }
+  
+  // Fallback to window.ethereum
+  if (typeof window !== 'undefined' && window.ethereum) {
+    return window.ethereum;
+  }
+  
+  return null;
 }
 
 /**
@@ -51,12 +144,13 @@ export function parseTokenAmount(amount: string, decimals: number): bigint {
  * Check if wallet is on correct network, switch if needed
  */
 export async function ensureCorrectNetwork(): Promise<boolean> {
-  if (typeof window === 'undefined' || !window.ethereum) {
+  const provider = await getWalletProvider();
+  if (!provider) {
     return false;
   }
 
   try {
-    const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+    const chainIdHex = await provider.request({ method: 'eth_chainId' });
     const chainId = parseInt(chainIdHex as string, 16);
     
     if (isCorrectNetwork(chainId)) {
@@ -65,7 +159,7 @@ export async function ensureCorrectNetwork(): Promise<boolean> {
 
     // Try to switch network
     try {
-      await window.ethereum.request({
+      await provider.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: getChainIdHex(ACTIVE_CHAIN_ID) }],
       });
@@ -74,7 +168,7 @@ export async function ensureCorrectNetwork(): Promise<boolean> {
       const error = switchError as { code?: number };
       if (error.code === 4902) {
         // Chain not added, add it
-        await window.ethereum.request({
+        await provider.request({
           method: 'wallet_addEthereumChain',
           params: [getChainConfig(IS_TESTNET)],
         });
@@ -96,14 +190,15 @@ export async function getAllowance(
   ownerAddress: string,
   spenderAddress: string
 ): Promise<bigint> {
-  if (typeof window === 'undefined' || !window.ethereum) {
+  const provider = await getProvider();
+  if (!provider) {
     return BigInt(0);
   }
 
   try {
     const data = ALLOWANCE_SELECTOR + padAddress(ownerAddress) + padAddress(spenderAddress);
     
-    const result = await window.ethereum.request({
+    const result = await provider.request({
       method: 'eth_call',
       params: [{ to: tokenAddress, data }, 'latest'],
     });
@@ -124,7 +219,8 @@ export async function approveToken(
   amount: bigint,
   walletAddress: string
 ): Promise<TransactionResult> {
-  if (typeof window === 'undefined' || !window.ethereum) {
+  const provider = await getWalletProvider();
+  if (!provider) {
     return { success: false, error: 'Wallet not available' };
   }
 
@@ -139,7 +235,7 @@ export async function approveToken(
     const data = APPROVE_SELECTOR + padAddress(spenderAddress) + padUint256(amount);
 
     // Send transaction - this will prompt wallet approval
-    const txHash = await window.ethereum.request({
+    const txHash = await provider.request({
       method: 'eth_sendTransaction',
       params: [{
         from: walletAddress,
@@ -168,7 +264,8 @@ export async function transferToken(
   amount: bigint,
   walletAddress: string
 ): Promise<TransactionResult> {
-  if (typeof window === 'undefined' || !window.ethereum) {
+  const provider = await getWalletProvider();
+  if (!provider) {
     return { success: false, error: 'Wallet not available' };
   }
 
@@ -183,7 +280,7 @@ export async function transferToken(
     const data = TRANSFER_SELECTOR + padAddress(toAddress) + padUint256(amount);
 
     // Send transaction - this will prompt wallet approval
-    const txHash = await window.ethereum.request({
+    const txHash = await provider.request({
       method: 'eth_sendTransaction',
       params: [{
         from: walletAddress,
@@ -211,7 +308,8 @@ export async function transferETH(
   amountWei: bigint,
   walletAddress: string
 ): Promise<TransactionResult> {
-  if (typeof window === 'undefined' || !window.ethereum) {
+  const provider = await getWalletProvider();
+  if (!provider) {
     return { success: false, error: 'Wallet not available' };
   }
 
@@ -223,7 +321,7 @@ export async function transferETH(
     }
 
     // Send ETH transaction
-    const txHash = await window.ethereum.request({
+    const txHash = await provider.request({
       method: 'eth_sendTransaction',
       params: [{
         from: walletAddress,
@@ -247,13 +345,14 @@ export async function transferETH(
  * Wait for transaction to be mined
  */
 export async function waitForTransaction(txHash: string, maxAttempts = 60): Promise<boolean> {
-  if (typeof window === 'undefined' || !window.ethereum) {
+  const provider = await getProvider();
+  if (!provider) {
     return false;
   }
 
   for (let i = 0; i < maxAttempts; i++) {
     try {
-      const receipt = await window.ethereum.request({
+      const receipt = await provider.request({
         method: 'eth_getTransactionReceipt',
         params: [txHash],
       });
@@ -397,7 +496,8 @@ export async function createQuizOnChain(
   stakeDecimals: number,
   walletAddress: string
 ): Promise<TransactionResult> {
-  if (typeof window === 'undefined' || !window.ethereum) {
+  const provider = await getWalletProvider();
+  if (!provider) {
     return { success: false, error: 'Wallet not available' };
   }
 
@@ -443,7 +543,7 @@ export async function createQuizOnChain(
       stakeAmountBigInt
     );
 
-    const txHash = await window.ethereum.request({
+    const txHash = await provider.request({
       method: 'eth_sendTransaction',
       params: [{
         from: walletAddress,
@@ -476,7 +576,8 @@ export async function joinQuizOnChain(
   stakeDecimals: number,
   walletAddress: string
 ): Promise<TransactionResult> {
-  if (typeof window === 'undefined' || !window.ethereum) {
+  const provider = await getWalletProvider();
+  if (!provider) {
     return { success: false, error: 'Wallet not available' };
   }
 
@@ -523,7 +624,7 @@ export async function joinQuizOnChain(
     const quizIdBytes32 = stringToBytes32(quizId).slice(2);
     const data = JOIN_QUIZ_SELECTOR + quizIdBytes32;
 
-    const txHash = await window.ethereum.request({
+    const txHash = await provider.request({
       method: 'eth_sendTransaction',
       params: [{
         from: walletAddress,
@@ -550,7 +651,8 @@ export async function claimRewardOnChain(
   quizId: string,
   walletAddress: string
 ): Promise<TransactionResult> {
-  if (typeof window === 'undefined' || !window.ethereum) {
+  const provider = await getWalletProvider();
+  if (!provider) {
     return { success: false, error: 'Wallet not available' };
   }
 
@@ -569,7 +671,7 @@ export async function claimRewardOnChain(
     const quizIdBytes32 = stringToBytes32(quizId).slice(2);
     const data = CLAIM_REWARD_SELECTOR + quizIdBytes32;
 
-    const txHash = await window.ethereum.request({
+    const txHash = await provider.request({
       method: 'eth_sendTransaction',
       params: [{
         from: walletAddress,
@@ -596,7 +698,8 @@ export async function returnStakeOnChain(
   quizId: string,
   walletAddress: string
 ): Promise<TransactionResult> {
-  if (typeof window === 'undefined' || !window.ethereum) {
+  const provider = await getWalletProvider();
+  if (!provider) {
     return { success: false, error: 'Wallet not available' };
   }
 
@@ -613,7 +716,7 @@ export async function returnStakeOnChain(
     const quizIdBytes32 = stringToBytes32(quizId).slice(2);
     const data = RETURN_STAKE_SELECTOR + quizIdBytes32;
 
-    const txHash = await window.ethereum.request({
+    const txHash = await provider.request({
       method: 'eth_sendTransaction',
       params: [{
         from: walletAddress,
@@ -637,7 +740,12 @@ export async function returnStakeOnChain(
  * Check if user has joined a quiz
  */
 export async function hasJoinedQuiz(quizId: string, walletAddress: string): Promise<boolean> {
-  if (typeof window === 'undefined' || !window.ethereum || !QUIZ_REWARD_POOL_ADDRESS) {
+  if (!QUIZ_REWARD_POOL_ADDRESS) {
+    return false;
+  }
+
+  const provider = await getProvider();
+  if (!provider) {
     return false;
   }
 
@@ -645,7 +753,7 @@ export async function hasJoinedQuiz(quizId: string, walletAddress: string): Prom
     const quizIdBytes32 = stringToBytes32(quizId).slice(2);
     const data = HAS_JOINED_SELECTOR + quizIdBytes32 + padAddress(walletAddress);
 
-    const result = await window.ethereum.request({
+    const result = await provider.request({
       method: 'eth_call',
       params: [{ to: QUIZ_REWARD_POOL_ADDRESS, data }, 'latest'],
     });
@@ -661,7 +769,12 @@ export async function hasJoinedQuiz(quizId: string, walletAddress: string): Prom
  * Get claimable reward amount for user
  */
 export async function getClaimableReward(quizId: string, walletAddress: string): Promise<bigint> {
-  if (typeof window === 'undefined' || !window.ethereum || !QUIZ_REWARD_POOL_ADDRESS) {
+  if (!QUIZ_REWARD_POOL_ADDRESS) {
+    return BigInt(0);
+  }
+
+  const provider = await getProvider();
+  if (!provider) {
     return BigInt(0);
   }
 
@@ -669,7 +782,7 @@ export async function getClaimableReward(quizId: string, walletAddress: string):
     const quizIdBytes32 = stringToBytes32(quizId).slice(2);
     const data = GET_CLAIMABLE_SELECTOR + quizIdBytes32 + padAddress(walletAddress);
 
-    const result = await window.ethereum.request({
+    const result = await provider.request({
       method: 'eth_call',
       params: [{ to: QUIZ_REWARD_POOL_ADDRESS, data }, 'latest'],
     });

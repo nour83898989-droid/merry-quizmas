@@ -14,7 +14,7 @@ const activeChain = IS_TESTNET ? baseSepolia : base;
 const queryClient = new QueryClient();
 
 // Create wagmi config with farcasterMiniApp as FIRST connector (per official docs)
-const config = createConfig({
+export const wagmiConfig = createConfig({
   chains: [base, baseSepolia],
   transports: {
     [base.id]: http(),
@@ -243,7 +243,7 @@ export function FarcasterProvider({ children }: { children: ReactNode }) {
   }), [isReady, isInMiniApp, platformType, user, authToken, getAuthToken]);
 
   return (
-    <WagmiProvider config={config}>
+    <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <FarcasterContext.Provider value={contextValue}>
           <FarcasterInitializer onReady={handleReady}>

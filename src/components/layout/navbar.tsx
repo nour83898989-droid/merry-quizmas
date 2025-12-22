@@ -28,14 +28,14 @@ export function Navbar() {
     }
   }, [isConnected]);
 
-  // Check admin status when address changes
+  // Check admin status when address or farcasterUser changes
   useEffect(() => {
-    if (address) {
-      checkAdminStatus(address);
+    if (address || farcasterUser?.fid) {
+      checkAdminStatus(address, farcasterUser?.fid);
     } else {
       setIsAdmin(false);
     }
-  }, [address]);
+  }, [address, farcasterUser?.fid]);
 
   // Listen for network changes
   useEffect(() => {
@@ -60,11 +60,18 @@ export function Navbar() {
   }, []);
 
 
-  const checkAdminStatus = async (wallet: string) => {
+  const checkAdminStatus = async (wallet?: string, fid?: number) => {
     try {
-      const res = await fetch('/api/admin', {
-        headers: { 'x-wallet-address': wallet },
-      });
+      const headers: Record<string, string> = {};
+      if (wallet) headers['x-wallet-address'] = wallet;
+      if (fid) headers['x-fid'] = fid.toString();
+      
+      if (Object.keys(headers).length === 0) {
+        setIsAdmin(false);
+        return;
+      }
+      
+      const res = await fetch('/api/admin', { headers });
       setIsAdmin(res.ok);
     } catch {
       setIsAdmin(false);

@@ -3,6 +3,8 @@
  * Functions for blockchain interactions
  */
 
+import { getPublicClient, getWalletClient } from '@wagmi/core';
+import { wagmiConfig } from '@/components/providers/farcaster-provider';
 import { 
   ACTIVE_CHAIN_ID,
   IS_TESTNET,
@@ -36,15 +38,110 @@ export interface NetworkInfo {
 }
 
 /**
+ * Get provider for read-only calls - tries wagmi first, falls back to window.ethereum
+ */
+async function getProvider(): Promise<{ request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } | null> {
+  // Try wagmi public client first
+  try {
+    const publicClient = getPublicClient(wagmiConfig);
+    if (publicClient) {
+      return {
+        request: async ({ method, params }) => {
+          if (method === 'eth_call' && params) {
+            const [callParams] = params as [{ to: string; data: string }];
+            const result = await publicClient.call({
+              to: callParams.to as `0x${string}`,
+              data: callParams.data as `0x${string}`,
+            });
+            return result.data;
+          }
+          if (method === 'eth_getBalance' && params) {
+            const [address] = params as [string];
+            const balance = await publicClient.getBalance({
+              address: address as `0x${string}`,
+            });
+            return `0x${balance.toString(16)}`;
+          }
+          if (method === 'eth_chainId') {
+            return `0x${publicClient.chain.id.toString(16)}`;
+          }
+          if (method === 'eth_getTransactionReceipt' && params?.[0]) {
+            const receipt = await publicClient.getTransactionReceipt({
+              hash: params[0] as `0x${string}`,
+            });
+            return receipt;
+          }
+          // Fallback to window.ethereum
+          if (typeof window !== 'undefined' && window.ethereum) {
+            return window.ethereum.request({ method, params });
+          }
+          throw new Error(`Method ${method} not supported`);
+        }
+      };
+    }
+  } catch (e) {
+    console.log('[Client] Wagmi public client not available:', e);
+  }
+  
+  // Fallback to window.ethereum
+  if (typeof window !== 'undefined' && window.ethereum) {
+    return window.ethereum;
+  }
+  
+  return null;
+}
+
+/**
+ * Get wallet provider for write operations
+ */
+async function getWalletProvider(): Promise<{ request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } | null> {
+  // Try wagmi wallet client first
+  try {
+    const walletClient = await getWalletClient(wagmiConfig);
+    if (walletClient) {
+      return {
+        request: async ({ method, params }) => {
+          if (method === 'wallet_switchEthereumChain' || method === 'wallet_addEthereumChain') {
+            // These methods need window.ethereum
+            if (typeof window !== 'undefined' && window.ethereum) {
+              return window.ethereum.request({ method, params });
+            }
+            throw new Error(`Method ${method} not supported without window.ethereum`);
+          }
+          if (method === 'eth_chainId') {
+            return `0x${walletClient.chain.id.toString(16)}`;
+          }
+          // Fallback to window.ethereum
+          if (typeof window !== 'undefined' && window.ethereum) {
+            return window.ethereum.request({ method, params });
+          }
+          throw new Error(`Method ${method} not supported`);
+        }
+      };
+    }
+  } catch (e) {
+    console.log('[Client] Wagmi wallet client not available:', e);
+  }
+  
+  // Fallback to window.ethereum
+  if (typeof window !== 'undefined' && window.ethereum) {
+    return window.ethereum;
+  }
+  
+  return null;
+}
+
+/**
  * Get current network info from wallet
  */
 export async function getCurrentNetwork(): Promise<NetworkInfo | null> {
-  if (typeof window === 'undefined' || !window.ethereum) {
+  const provider = await getProvider();
+  if (!provider) {
     return null;
   }
 
   try {
-    const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+    const chainIdHex = await provider.request({ method: 'eth_chainId' });
     const chainId = parseInt(chainIdHex as string, 16);
     return {
       chainId,
@@ -60,14 +157,15 @@ export async function getCurrentNetwork(): Promise<NetworkInfo | null> {
  * Switch to the active network (Base Mainnet or Base Sepolia)
  */
 export async function switchToBase(): Promise<boolean> {
-  if (typeof window === 'undefined' || !window.ethereum) {
+  const provider = await getWalletProvider();
+  if (!provider) {
     return false;
   }
 
   const targetChainId = ACTIVE_CHAIN_ID;
 
   try {
-    await window.ethereum.request({
+    await provider.request({
       method: 'wallet_switchEthereumChain',
       params: [{ chainId: getChainIdHex(targetChainId) }],
     });
@@ -78,7 +176,7 @@ export async function switchToBase(): Promise<boolean> {
     if (error.code === 4902) {
       try {
         const chainConfig = getChainConfig(IS_TESTNET);
-        await window.ethereum.request({
+        await provider.request({
           method: 'wallet_addEthereumChain',
           params: [chainConfig],
         });
@@ -97,7 +195,12 @@ export async function switchToBase(): Promise<boolean> {
  * Get token balance for address
  */
 export async function getTokenBalance(address: string): Promise<string> {
-  if (typeof window === 'undefined' || !window.ethereum || !REWARD_TOKEN_ADDRESS) {
+  if (!REWARD_TOKEN_ADDRESS) {
+    return '0';
+  }
+
+  const provider = await getProvider();
+  if (!provider) {
     return '0';
   }
 
@@ -105,7 +208,7 @@ export async function getTokenBalance(address: string): Promise<string> {
     // Encode balanceOf call
     const data = encodeBalanceOf(address);
     
-    const result = await window.ethereum.request({
+    const result = await provider.request({
       method: 'eth_call',
       params: [{
         to: REWARD_TOKEN_ADDRESS,
@@ -163,12 +266,13 @@ export function formatTokenBalance(balance: string, decimals: number): string {
  * Get ETH balance for address
  */
 export async function getEthBalance(address: string): Promise<string> {
-  if (typeof window === 'undefined' || !window.ethereum) {
+  const provider = await getProvider();
+  if (!provider) {
     return '0';
   }
 
   try {
-    const result = await window.ethereum.request({
+    const result = await provider.request({
       method: 'eth_getBalance',
       params: [address, 'latest'],
     });
@@ -184,14 +288,19 @@ export async function getEthBalance(address: string): Promise<string> {
  * Get balance for a specific ERC20 token
  */
 export async function getERC20Balance(tokenAddress: string, walletAddress: string): Promise<string> {
-  if (typeof window === 'undefined' || !window.ethereum || !tokenAddress || tokenAddress === '0x0000000000000000000000000000000000000000') {
+  if (!tokenAddress || tokenAddress === '0x0000000000000000000000000000000000000000') {
+    return '0';
+  }
+
+  const provider = await getProvider();
+  if (!provider) {
     return '0';
   }
 
   try {
     const data = encodeBalanceOf(walletAddress);
     
-    const result = await window.ethereum.request({
+    const result = await provider.request({
       method: 'eth_call',
       params: [{
         to: tokenAddress,
@@ -210,7 +319,7 @@ export async function getERC20Balance(tokenAddress: string, walletAddress: strin
  * Get all supported token balances for a wallet
  */
 export async function getAllTokenBalances(walletAddress: string): Promise<TokenBalance[]> {
-  if (typeof window === 'undefined' || !window.ethereum || !walletAddress) {
+  if (!walletAddress) {
     return [];
   }
 
@@ -344,13 +453,14 @@ export async function claimAllRewards(
  * Watch for transaction confirmation
  */
 export async function waitForTransaction(txHash: string, maxAttempts = 30): Promise<boolean> {
-  if (typeof window === 'undefined' || !window.ethereum) {
+  const provider = await getProvider();
+  if (!provider) {
     return false;
   }
 
   for (let i = 0; i < maxAttempts; i++) {
     try {
-      const receipt = await window.ethereum.request({
+      const receipt = await provider.request({
         method: 'eth_getTransactionReceipt',
         params: [txHash],
       });
