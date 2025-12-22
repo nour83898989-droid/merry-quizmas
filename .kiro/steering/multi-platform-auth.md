@@ -205,3 +205,229 @@ else {
 - [ ] Verify Quick Auth token is obtained in mini app
 - [ ] Verify Neynar lookup works for browser users
 - [ ] Verify API calls include auth headers
+
+---
+
+## Wallet Connection Architecture (End-to-End)
+
+### Files yang Membutuhkan Wallet Connection
+
+#### 1. Core Provider & Hooks
+| File | Fungsi | Wallet Hooks |
+|------|--------|--------------|
+| `src/components/providers/farcaster-provider.tsx` | Central provider, wagmi config | `useConnect`, `useAccount` |
+| `src/components/wallet/connect-button.tsx` | Connect/disconnect button | `useAccount`, `useConnect`, `useDisconnect` |
+| `src/components/layout/navbar.tsx` | Header navigation | `useAccount`, `useDisconnect` |
+| `src/hooks/useFarcasterUser.ts` | User data enrichment | `useAccount` |
+
+#### 2. Pages yang Membutuhkan Wallet
+| Page | Path | Wallet Usage | Fallback |
+|------|------|--------------|----------|
+| Quiz Detail | `/quiz/[id]/page.tsx` | Join quiz, pay entry fee | Show "Connect Wallet" warning |
+| Create Quiz | `/create/page.tsx` | Deposit rewards, publish | Block publish button |
+| Claim Rewards | `/claim/page.tsx` | Claim onchain rewards | Show "Connect Wallet" card |
+| Profile | `/profile/page.tsx` | View stats, balances | Show "Connect Wallet" card |
+
+### Wallet State Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    FarcasterProvider                            │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ WagmiProvider (config)                                   │   │
+│  │  - chains: [base, baseSepolia]                          │   │
+│  │  - connectors: [farcasterMiniApp, injected, coinbase]   │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                              │                                  │
+│                              ▼                                  │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ AutoConnectWallet                                        │   │
+│  │  - Waits for isReady                                    │   │
+│  │  - Auto-connects in mini app                            │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Navbar (Header)                              │
+│  - Shows ConnectButton when not connected                       │
+│  - Shows user PFP/username when connected                       │
+│  - Dropdown menu: Profile, Rewards, Admin, Disconnect           │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Page Components                              │
+│  - Quiz Detail: handleWalletConnect callback                    │
+│  - Create: window.ethereum.request for address                  │
+│  - Claim: window.ethereum.request for address                   │
+│  - Profile: window.ethereum.request for address                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Wallet Address Sources
+
+Ada 2 cara mendapatkan wallet address di app ini:
+
+#### 1. Via Wagmi Hooks (Recommended)
+```typescript
+import { useAccount } from 'wagmi';
+
+function Component() {
+  const { address, isConnected } = useAccount();
+  // address sudah tersedia dari wagmi state
+}
+```
+
+**Digunakan di:**
+- `farcaster-provider.tsx` - AutoConnectWallet
+- `connect-button.tsx` - ConnectButton
+- `navbar.tsx` - Navbar
+- `useFarcasterUser.ts` - useFarcasterUser hook
+
+#### 2. Via window.ethereum (Legacy)
+```typescript
+useEffect(() => {
+  if (window.ethereum) {
+    window.ethereum.request({ method: 'eth_accounts' })
+      .then((accounts) => setAddress(accounts[0]));
+  }
+}, []);
+```
+
+**Digunakan di:**
+- `quiz/[id]/page.tsx` - Quiz Detail (via ConnectButton callback)
+- `create/page.tsx` - Create Quiz
+- `claim/page.tsx` - Claim Page
+- `profile/page.tsx` - Profile Page
+
+### Network Checking
+
+Semua pages yang interact dengan blockchain perlu check network:
+
+```typescript
+import { getCurrentNetwork, switchToBase } from '@/lib/web3/client';
+import { IS_TESTNET, ACTIVE_CHAIN_ID } from '@/lib/web3/config';
+
+// Check network
+const network = await getCurrentNetwork();
+if (!network.isCorrect) {
+  await switchToBase(); // Switch to Base or Base Sepolia
+}
+```
+
+**Files dengan network check:**
+- `connect-button.tsx` - Shows network indicator
+- `navbar.tsx` - Shows "Wrong Network" button
+- `claim/page.tsx` - Blocks claim if wrong network
+- `quiz/[id]/page.tsx` - Implicit via transactions
+
+### Onchain Transaction Flow
+
+#### Quiz Detail Page (`/quiz/[id]`)
+```
+User clicks "Start Quiz"
+    │
+    ├── No wallet? → Show "Connect Wallet First" button
+    │
+    └── Has wallet?
+        │
+        ├── Quiz has entry fee/stake?
+        │   │
+        │   ├── Check hasJoinedQuiz() on contract
+        │   │
+        │   └── Not joined? → joinQuizOnChain()
+        │       │
+        │       ├── Approve entry fee token
+        │       ├── Approve stake token
+        │       └── Call contract.joinQuiz()
+        │
+        └── Start quiz session via API
+```
+
+#### Create Quiz Page (`/create`)
+```
+User clicks "Publish Quiz"
+    │
+    ├── No wallet? → Alert "Connect wallet first"
+    │
+    └── Has wallet?
+        │
+        ├── createQuizOnChain()
+        │   │
+        │   ├── Approve reward token
+        │   └── Call contract.createQuiz()
+        │
+        └── Save to database with contractQuizId
+```
+
+#### Claim Page (`/claim`)
+```
+User clicks "Claim Reward"
+    │
+    ├── No wallet? → Show "Connect Wallet" card
+    │
+    └── Has wallet?
+        │
+        ├── Check network → Switch if wrong
+        │
+        ├── Check getClaimableReward() on contract
+        │
+        └── claimRewardOnChain()
+            │
+            └── Call contract.claimReward()
+```
+
+### ConnectButton Props
+
+```typescript
+interface ConnectButtonProps {
+  onConnect?: (address: string, farcasterUser?: { fid: number; username?: string } | null) => void;
+  showDisconnect?: boolean;  // Show disconnect button
+  size?: 'sm' | 'md' | 'lg';
+}
+```
+
+**Usage patterns:**
+
+```typescript
+// In Navbar - no callback, uses internal state
+<ConnectButton />
+
+// In Quiz Detail - with callback to get address
+<ConnectButton onConnect={handleWalletConnect} />
+
+// With disconnect button
+<ConnectButton showDisconnect={true} />
+```
+
+### Known Issues & Solutions
+
+#### Issue 1: Duplicate wallet state
+**Problem:** Pages use both wagmi hooks AND window.ethereum
+**Solution:** Migrate all pages to use wagmi hooks consistently
+
+#### Issue 2: Network mismatch
+**Problem:** User on wrong network can't transact
+**Solution:** All transaction pages check network first
+
+#### Issue 3: Auto-connect race condition
+**Problem:** Auto-connect before SDK ready
+**Solution:** AutoConnectWallet waits for `isReady` flag
+
+### Migration Plan (TODO)
+
+1. **Phase 1:** Standardize wallet access
+   - [ ] Migrate `create/page.tsx` to use wagmi hooks
+   - [ ] Migrate `claim/page.tsx` to use wagmi hooks
+   - [ ] Migrate `profile/page.tsx` to use wagmi hooks
+   - [ ] Migrate `quiz/[id]/page.tsx` to use wagmi hooks
+
+2. **Phase 2:** Remove window.ethereum direct calls
+   - [ ] Remove `window.ethereum.request` from pages
+   - [ ] Use `useAccount()` hook everywhere
+   - [ ] Use `useSwitchChain()` for network switching
+
+3. **Phase 3:** Unified error handling
+   - [ ] Create `useWalletRequired()` hook
+   - [ ] Standardize "Connect Wallet" UI across pages
