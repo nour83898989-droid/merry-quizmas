@@ -309,18 +309,37 @@ export async function POST(request: NextRequest) {
       }
 
       case 'delete_quiz': {
-        // Soft delete - set status to 'deleted'
+        // Soft delete quiz and cascade delete related data
         if (!body.quizId) {
           return NextResponse.json({ error: 'BAD_REQUEST', message: 'quizId required' }, { status: 400 });
         }
 
+        // Delete related winners
+        await supabase
+          .from('winners')
+          .delete()
+          .eq('quiz_id', body.quizId);
+
+        // Delete related attempts
+        await supabase
+          .from('attempts')
+          .delete()
+          .eq('quiz_id', body.quizId);
+
+        // Delete related reward_claims
+        await supabase
+          .from('reward_claims')
+          .delete()
+          .eq('quiz_id', body.quizId);
+
+        // Soft delete the quiz
         const { error } = await supabase
           .from('quizzes')
           .update({ status: 'deleted' })
           .eq('id', body.quizId);
 
         if (error) throw error;
-        return NextResponse.json({ success: true, message: 'Quiz deleted' });
+        return NextResponse.json({ success: true, message: 'Quiz and related data deleted' });
       }
 
       case 'delete_poll': {

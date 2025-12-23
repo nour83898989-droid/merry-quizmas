@@ -20,7 +20,8 @@ export function DatePicker({
   const [isOpen, setIsOpen] = useState(false);
   const [viewDate, setViewDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(value ? new Date(value) : null);
-  const [selectedTime, setSelectedTime] = useState(value ? new Date(value).toTimeString().slice(0, 5) : '12:00');
+  const [selectedHour, setSelectedHour] = useState(value ? new Date(value).getHours() : 12);
+  const [selectedMinute, setSelectedMinute] = useState(value ? new Date(value).getMinutes() : 0);
   const [openAbove, setOpenAbove] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -33,9 +34,8 @@ export function DatePicker({
     const viewportHeight = window.innerHeight;
     const spaceBelow = viewportHeight - rect.bottom;
     const spaceAbove = rect.top;
-    const popupHeight = 420; // Approximate height of calendar popup
+    const popupHeight = 480;
     
-    // Open above if not enough space below and more space above
     setOpenAbove(spaceBelow < popupHeight && spaceAbove > spaceBelow);
   }, []);
 
@@ -44,7 +44,8 @@ export function DatePicker({
     if (value) {
       const date = new Date(value);
       setSelectedDate(date);
-      setSelectedTime(date.toTimeString().slice(0, 5));
+      setSelectedHour(date.getHours());
+      setSelectedMinute(date.getMinutes());
       setViewDate(date);
     }
   }, [value]);
@@ -60,7 +61,7 @@ export function DatePicker({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Recalculate position on open and scroll
+  // Recalculate position on open
   useEffect(() => {
     if (isOpen) {
       calculatePosition();
@@ -73,6 +74,11 @@ export function DatePicker({
     }
   }, [isOpen, calculatePosition]);
 
+  // Prevent keyboard events from bubbling (fixes arrow key issue)
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    e.stopPropagation();
+  }, []);
+
   const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
   const firstDayOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1).getDay();
   
@@ -80,44 +86,47 @@ export function DatePicker({
                       'July', 'August', 'September', 'October', 'November', 'December'];
   const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
-  const handleDateSelect = (day: number) => {
-    const newDate = new Date(viewDate.getFullYear(), viewDate.getMonth(), day);
-    setSelectedDate(newDate);
-    
-    // Combine with time
-    const [hours, minutes] = selectedTime.split(':').map(Number);
-    newDate.setHours(hours, minutes, 0, 0);
-    
-    // Format as datetime-local value
+  const updateDateTime = (date: Date | null, hour: number, minute: number) => {
+    if (!date) return;
+    const newDate = new Date(date);
+    newDate.setHours(hour, minute, 0, 0);
     const isoString = newDate.toISOString().slice(0, 16);
     onChange(isoString);
   };
 
-  const handleTimeChange = (time: string) => {
-    setSelectedTime(time);
-    
-    if (selectedDate) {
-      const newDate = new Date(selectedDate);
-      const [hours, minutes] = time.split(':').map(Number);
-      newDate.setHours(hours, minutes, 0, 0);
-      
-      const isoString = newDate.toISOString().slice(0, 16);
-      onChange(isoString);
-    }
+  const handleDateSelect = (day: number) => {
+    const newDate = new Date(viewDate.getFullYear(), viewDate.getMonth(), day);
+    setSelectedDate(newDate);
+    updateDateTime(newDate, selectedHour, selectedMinute);
+  };
+
+  const handleHourChange = (hour: number) => {
+    setSelectedHour(hour);
+    updateDateTime(selectedDate, hour, selectedMinute);
+  };
+
+  const handleMinuteChange = (minute: number) => {
+    setSelectedMinute(minute);
+    updateDateTime(selectedDate, selectedHour, minute);
   };
 
   const handleClear = () => {
     setSelectedDate(null);
-    setSelectedTime('12:00');
+    setSelectedHour(12);
+    setSelectedMinute(0);
     onChange('');
     setIsOpen(false);
   };
 
-  const prevMonth = () => {
+  const prevMonth = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
   };
 
-  const nextMonth = () => {
+  const nextMonth = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
   };
 
@@ -145,16 +154,22 @@ export function DatePicker({
 
   const formatDisplayValue = () => {
     if (!selectedDate) return '';
+    const timeStr = `${selectedHour.toString().padStart(2, '0')}:${selectedMinute.toString().padStart(2, '0')}`;
     return selectedDate.toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
       year: 'numeric',
-    }) + ' ' + selectedTime;
+    }) + ' ' + timeStr;
   };
 
+  // Generate hour options (0-23)
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+  // Generate minute options (0, 15, 30, 45 for simplicity)
+  const minutes = [0, 15, 30, 45];
+
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative" ref={dropdownRef} onKeyDown={handleKeyDown}>
       {/* Input Button */}
       <button
         ref={buttonRef}
@@ -180,11 +195,14 @@ export function DatePicker({
         <CalendarIcon className="w-5 h-5 text-foreground-muted" />
       </button>
 
-      {/* Calendar Popup - mobile-friendly with fixed positioning on small screens */}
+      {/* Calendar Popup */}
       {isOpen && (
         <>
           {/* Mobile overlay */}
-          <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setIsOpen(false)} />
+          <div 
+            className="fixed inset-0 bg-black/50 z-40 md:hidden" 
+            onClick={() => setIsOpen(false)} 
+          />
           
           <div 
             className={`
@@ -194,9 +212,9 @@ export function DatePicker({
               p-4 rounded-xl border border-foreground/10 bg-surface shadow-xl
               ${openAbove 
                 ? 'md:bottom-full md:mb-2 bottom-4' 
-                : 'md:top-full md:mt-2 top-1/2 md:top-auto -translate-y-1/2 md:translate-y-0'
+                : 'md:top-full md:mt-2 top-auto bottom-4 md:bottom-auto'
               }
-              max-h-[80vh] overflow-y-auto
+              max-h-[85vh] overflow-y-auto
             `}
           >
             {/* Month Navigation */}
@@ -204,17 +222,17 @@ export function DatePicker({
               <button
                 type="button"
                 onClick={prevMonth}
-                className="p-2 rounded-lg hover:bg-foreground/5 transition-colors"
+                className="p-3 rounded-lg hover:bg-foreground/10 active:bg-foreground/20 transition-colors touch-manipulation"
               >
                 <ChevronLeftIcon className="w-5 h-5 text-foreground" />
               </button>
-              <span className="font-medium text-foreground">
+              <span className="font-medium text-foreground text-base">
                 {monthNames[viewDate.getMonth()]} {viewDate.getFullYear()}
               </span>
               <button
                 type="button"
                 onClick={nextMonth}
-                className="p-2 rounded-lg hover:bg-foreground/5 transition-colors"
+                className="p-3 rounded-lg hover:bg-foreground/10 active:bg-foreground/20 transition-colors touch-manipulation"
               >
                 <ChevronRightIcon className="w-5 h-5 text-foreground" />
               </button>
@@ -223,7 +241,7 @@ export function DatePicker({
             {/* Day Names */}
             <div className="grid grid-cols-7 gap-1 mb-2">
               {dayNames.map(day => (
-                <div key={day} className="text-center text-xs text-foreground-muted py-1">
+                <div key={day} className="text-center text-xs text-foreground-muted py-1 font-medium">
                   {day}
                 </div>
               ))}
@@ -233,13 +251,13 @@ export function DatePicker({
             <div className="grid grid-cols-7 gap-1">
               {/* Empty cells for days before first of month */}
               {Array.from({ length: firstDayOfMonth }).map((_, i) => (
-                <div key={`empty-${i}`} className="h-9" />
+                <div key={`empty-${i}`} className="h-10" />
               ))}
               
               {/* Days */}
               {Array.from({ length: daysInMonth }).map((_, i) => {
                 const day = i + 1;
-                const disabled = isDateDisabled(day);
+                const dayDisabled = isDateDisabled(day);
                 const today = isToday(day);
                 const selected = isSelected(day);
 
@@ -247,16 +265,16 @@ export function DatePicker({
                   <button
                     key={day}
                     type="button"
-                    onClick={() => !disabled && handleDateSelect(day)}
-                    disabled={disabled}
-                    className={`h-9 rounded-lg text-sm font-medium transition-colors ${
-                      disabled
+                    onClick={() => !dayDisabled && handleDateSelect(day)}
+                    disabled={dayDisabled}
+                    className={`h-10 rounded-lg text-sm font-medium transition-colors touch-manipulation ${
+                      dayDisabled
                         ? 'text-foreground/20 cursor-not-allowed'
                         : selected
                         ? 'bg-primary text-white'
                         : today
-                        ? 'bg-primary/20 text-primary hover:bg-primary/30'
-                        : 'text-foreground hover:bg-foreground/5'
+                        ? 'bg-primary/20 text-primary'
+                        : 'text-foreground hover:bg-foreground/10 active:bg-foreground/20'
                     }`}
                   >
                     {day}
@@ -265,15 +283,62 @@ export function DatePicker({
               })}
             </div>
 
-            {/* Time Picker */}
+            {/* Time Picker - Mobile Friendly Dropdowns */}
             <div className="mt-4 pt-4 border-t border-foreground/10">
               <label className="block text-sm text-foreground-muted mb-2">Time</label>
-              <input
-                type="time"
-                value={selectedTime}
-                onChange={(e) => handleTimeChange(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-background border border-foreground/10 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-              />
+              <div className="flex gap-2 items-center">
+                {/* Hour Select */}
+                <select
+                  value={selectedHour}
+                  onChange={(e) => handleHourChange(parseInt(e.target.value))}
+                  className="flex-1 px-3 py-3 rounded-lg bg-background border border-foreground/10 text-foreground text-center text-lg font-medium focus:outline-none focus:ring-2 focus:ring-primary/50 appearance-none cursor-pointer"
+                  style={{ WebkitAppearance: 'none' }}
+                >
+                  {hours.map(h => (
+                    <option key={h} value={h}>
+                      {h.toString().padStart(2, '0')}
+                    </option>
+                  ))}
+                </select>
+                
+                <span className="text-foreground text-xl font-bold">:</span>
+                
+                {/* Minute Select */}
+                <select
+                  value={selectedMinute}
+                  onChange={(e) => handleMinuteChange(parseInt(e.target.value))}
+                  className="flex-1 px-3 py-3 rounded-lg bg-background border border-foreground/10 text-foreground text-center text-lg font-medium focus:outline-none focus:ring-2 focus:ring-primary/50 appearance-none cursor-pointer"
+                  style={{ WebkitAppearance: 'none' }}
+                >
+                  {minutes.map(m => (
+                    <option key={m} value={m}>
+                      {m.toString().padStart(2, '0')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              {/* Quick time buttons */}
+              <div className="flex gap-2 mt-3">
+                {[
+                  { label: 'Now', h: new Date().getHours(), m: Math.ceil(new Date().getMinutes() / 15) * 15 % 60 },
+                  { label: '12:00', h: 12, m: 0 },
+                  { label: '18:00', h: 18, m: 0 },
+                  { label: '21:00', h: 21, m: 0 },
+                ].map(({ label, h, m }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => {
+                      handleHourChange(h);
+                      handleMinuteChange(m);
+                    }}
+                    className="flex-1 px-2 py-1.5 text-xs rounded-lg border border-foreground/10 text-foreground-muted hover:bg-foreground/5 active:bg-foreground/10 transition-colors touch-manipulation"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Actions */}
@@ -281,14 +346,14 @@ export function DatePicker({
               <button
                 type="button"
                 onClick={handleClear}
-                className="flex-1 px-3 py-2 rounded-lg border border-foreground/10 text-foreground-muted hover:bg-foreground/5 transition-colors text-sm"
+                className="flex-1 px-3 py-3 rounded-lg border border-foreground/10 text-foreground-muted hover:bg-foreground/5 active:bg-foreground/10 transition-colors text-sm font-medium touch-manipulation"
               >
                 Clear
               </button>
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
-                className="flex-1 px-3 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors text-sm"
+                className="flex-1 px-3 py-3 rounded-lg bg-primary text-white hover:bg-primary/90 active:bg-primary/80 transition-colors text-sm font-medium touch-manipulation"
               >
                 Done
               </button>

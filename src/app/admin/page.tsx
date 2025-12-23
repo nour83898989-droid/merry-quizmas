@@ -341,43 +341,52 @@ export default function AdminPage() {
           </Card>
         )}
 
-        {activeTab === 'admins' && role === 'super_admin' && (
+        {activeTab === 'admins' && (
           <Card>
             <h3 className="text-lg font-semibold text-foreground mb-4">Manage Admins</h3>
-            <div className="flex gap-2 mb-4">
-              {(['wallet', 'fid', 'username'] as const).map(type => (
-                <button key={type} onClick={() => { setInputType(type); setLookupResult(null); }}
-                  className={`px-3 py-1 rounded-lg text-sm ${inputType === type ? 'bg-primary text-white' : 'bg-surface text-foreground-muted'}`}>
-                  By {type.charAt(0).toUpperCase() + type.slice(1)}
-                </button>
-              ))}
-            </div>
-            {lookupResult && <div className="mb-4 p-2 bg-success/10 text-success rounded-lg text-sm">✓ Found: {lookupResult}</div>}
-            <div className="flex gap-2 mb-4">
-              <Input value={newAdminInput} onChange={e => setNewAdminInput(e.target.value)}
-                placeholder={inputType === 'fid' ? "FID (e.g. 12345)" : inputType === 'username' ? "Username" : "Wallet (0x...)"}
-                className="flex-1" type={inputType === 'fid' ? "number" : "text"} />
-              <Button onClick={async () => {
-                if (inputType === 'username') {
-                  setLookupLoading(true);
-                  const users = await searchUsersByUsername(newAdminInput, 1);
-                  setLookupLoading(false);
-                  if (users.length > 0) { setLookupResult(`@${users[0].username} (FID: ${users[0].fid})`); handleAction('add_admin', { fid: users[0].fid, role: 'moderator' }); }
-                  else alert('Username not found');
-                } else if (inputType === 'fid') handleAction('add_admin', { fid: parseInt(newAdminInput), role: 'moderator' });
-                else handleAction('add_admin', { walletAddress: newAdminInput, role: 'moderator' });
-              }} disabled={!newAdminInput || actionLoading === 'add_admin' || lookupLoading}>{lookupLoading ? '...' : '+ Mod'}</Button>
-              <Button onClick={async () => {
-                if (inputType === 'username') {
-                  setLookupLoading(true);
-                  const users = await searchUsersByUsername(newAdminInput, 1);
-                  setLookupLoading(false);
-                  if (users.length > 0) { setLookupResult(`@${users[0].username} (FID: ${users[0].fid})`); handleAction('add_admin', { fid: users[0].fid, role: 'admin' }); }
-                  else alert('Username not found');
-                } else if (inputType === 'fid') handleAction('add_admin', { fid: parseInt(newAdminInput), role: 'admin' });
-                else handleAction('add_admin', { walletAddress: newAdminInput, role: 'admin' });
-              }} disabled={!newAdminInput || actionLoading === 'add_admin' || lookupLoading}>{lookupLoading ? '...' : '+ Admin'}</Button>
-            </div>
+            {role !== 'super_admin' ? (
+              <div className="text-center py-8">
+                <p className="text-foreground-muted">🔒 Only Super Admins can manage other admins</p>
+                <p className="text-sm text-foreground-muted mt-2">Your role: {role}</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex gap-2 mb-4">
+                  {(['wallet', 'fid', 'username'] as const).map(type => (
+                    <button key={type} onClick={() => { setInputType(type); setLookupResult(null); }}
+                      className={`px-3 py-1 rounded-lg text-sm ${inputType === type ? 'bg-primary text-white' : 'bg-surface text-foreground-muted'}`}>
+                      By {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                {lookupResult && <div className="mb-4 p-2 bg-success/10 text-success rounded-lg text-sm">✓ Found: {lookupResult}</div>}
+                <div className="flex gap-2 mb-4">
+                  <Input value={newAdminInput} onChange={e => setNewAdminInput(e.target.value)}
+                    placeholder={inputType === 'fid' ? "FID (e.g. 12345)" : inputType === 'username' ? "Username" : "Wallet (0x...)"}
+                    className="flex-1" type={inputType === 'fid' ? "number" : "text"} />
+                  <Button onClick={async () => {
+                    if (inputType === 'username') {
+                      setLookupLoading(true);
+                      const users = await searchUsersByUsername(newAdminInput, 1);
+                      setLookupLoading(false);
+                      if (users.length > 0) { setLookupResult(`@${users[0].username} (FID: ${users[0].fid})`); handleAction('add_admin', { fid: users[0].fid, role: 'moderator' }); }
+                      else alert('Username not found');
+                    } else if (inputType === 'fid') handleAction('add_admin', { fid: parseInt(newAdminInput), role: 'moderator' });
+                    else handleAction('add_admin', { walletAddress: newAdminInput, role: 'moderator' });
+                  }} disabled={!newAdminInput || actionLoading === 'add_admin' || lookupLoading}>{lookupLoading ? '...' : '+ Mod'}</Button>
+                  <Button onClick={async () => {
+                    if (inputType === 'username') {
+                      setLookupLoading(true);
+                      const users = await searchUsersByUsername(newAdminInput, 1);
+                      setLookupLoading(false);
+                      if (users.length > 0) { setLookupResult(`@${users[0].username} (FID: ${users[0].fid})`); handleAction('add_admin', { fid: users[0].fid, role: 'admin' }); }
+                      else alert('Username not found');
+                    } else if (inputType === 'fid') handleAction('add_admin', { fid: parseInt(newAdminInput), role: 'admin' });
+                    else handleAction('add_admin', { walletAddress: newAdminInput, role: 'admin' });
+                  }} disabled={!newAdminInput || actionLoading === 'add_admin' || lookupLoading}>{lookupLoading ? '...' : '+ Admin'}</Button>
+                </div>
+              </>
+            )}
             <h4 className="text-sm font-medium text-foreground mb-2 mt-6">Current Admins</h4>
             <div className="space-y-2">
               {admins.map(admin => (
@@ -388,7 +397,7 @@ export default function AdminPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`text-xs px-2 py-1 rounded-full ${admin.role === 'super_admin' ? 'bg-primary/20 text-primary' : admin.role === 'admin' ? 'bg-success/20 text-success' : 'bg-warning/20 text-warning'}`}>{admin.role}</span>
-                    {admin.role !== 'super_admin' && (
+                    {admin.role !== 'super_admin' && role === 'super_admin' && (
                       <Button size="sm" variant="outline" onClick={() => handleAction('remove_admin', admin.fid ? { fid: admin.fid } : { walletAddress: admin.wallet_address })}
                         disabled={actionLoading === 'remove_admin'}>✗</Button>
                     )}

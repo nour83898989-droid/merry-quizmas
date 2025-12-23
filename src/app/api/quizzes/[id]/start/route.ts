@@ -82,8 +82,9 @@ export async function POST(
       );
     }
 
-    // Check winner limit not reached
-    if ((quiz.current_winners ?? 0) >= quiz.winner_limit) {
+    // Check winner limit not reached (skip for fun quiz - unlimited participants)
+    const isFunQuiz = quiz.is_fun_quiz === true;
+    if (!isFunQuiz && quiz.winner_limit > 0 && (quiz.current_winners ?? 0) >= quiz.winner_limit) {
       return NextResponse.json(
         { error: 'QUIZ_CLOSED', message: 'Quiz has reached winner limit' },
         { status: 410 }

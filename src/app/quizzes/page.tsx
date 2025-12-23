@@ -29,10 +29,16 @@ interface Quiz {
   totalPoolAmount: string;
   entryFee: string | null;
   entryFeeToken: string | null;
+  // Fun quiz and image fields
+  isFunQuiz: boolean;
+  coverImageUrl: string | null;
+  // Creator info
+  creatorUsername: string | null;
+  createdAt: string;
 }
 
 type SortOption = 'newest' | 'ending_soon' | 'highest_reward' | 'most_spots';
-type FilterOption = 'all' | 'no_stake' | 'ending_soon';
+type FilterOption = 'all' | 'no_stake' | 'ending_soon' | 'fun_only' | 'rewards_only';
 
 export default function QuizzesPage() {
   const router = useRouter();
@@ -61,7 +67,9 @@ export default function QuizzesPage() {
   }
 
   const filteredQuizzes = quizzes.filter(quiz => {
-    if (filterBy === 'no_stake') return !quiz.stakeRequired;
+    if (filterBy === 'no_stake') return !quiz.stakeRequired && !quiz.isFunQuiz;
+    if (filterBy === 'fun_only') return quiz.isFunQuiz;
+    if (filterBy === 'rewards_only') return !quiz.isFunQuiz;
     if (filterBy === 'ending_soon') {
       if (!quiz.endsAt) return false;
       const hoursLeft = (new Date(quiz.endsAt).getTime() - Date.now()) / (1000 * 60 * 60);
@@ -107,6 +115,18 @@ export default function QuizzesPage() {
               onClick={() => setFilterBy('all')}
             >
               All
+            </FilterChip>
+            <FilterChip 
+              active={filterBy === 'fun_only'} 
+              onClick={() => setFilterBy('fun_only')}
+            >
+              🎉 Fun
+            </FilterChip>
+            <FilterChip 
+              active={filterBy === 'rewards_only'} 
+              onClick={() => setFilterBy('rewards_only')}
+            >
+              🏆 Rewards
             </FilterChip>
             <FilterChip 
               active={filterBy === 'no_stake'} 
@@ -176,6 +196,10 @@ export default function QuizzesPage() {
                 rewardPools={quiz.rewardPools}
                 totalPoolAmount={quiz.totalPoolAmount}
                 entryFee={quiz.entryFee}
+                isFunQuiz={quiz.isFunQuiz}
+                coverImageUrl={quiz.coverImageUrl}
+                creatorUsername={quiz.creatorUsername}
+                createdAt={quiz.createdAt}
                 onClick={() => router.push(`/quiz/${quiz.id}`)}
               />
             ))}
@@ -261,6 +285,8 @@ function EmptyState({ filterBy }: { filterBy: FilterOption }) {
     all: 'No quizzes available yet. Be the first to create one!',
     no_stake: 'No free quizzes available right now.',
     ending_soon: 'No quizzes ending soon.',
+    fun_only: 'No fun quizzes available. Create one!',
+    rewards_only: 'No reward quizzes available right now.',
   };
 
   return (

@@ -8,10 +8,13 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { TokenSelector } from '@/components/ui/token-selector';
 import { DatePicker } from '@/components/ui/date-picker';
+import { ImageUpload } from '@/components/ui/image-upload';
+import { ShareModal } from '@/components/ui/share-modal';
 import { ChristmasLayout } from '@/components/christmas/christmas-layout';
 import { Gift } from '@/components/christmas/decorations';
 import { SUPPORTED_TOKENS, IS_TESTNET, getTokenByAddress } from '@/lib/web3/config';
 import { createQuizOnChain, waitForTransaction } from '@/lib/web3/transactions';
+import { useFarcasterUser } from '@/hooks/useFarcasterUser';
 
 interface Question {
   id: string;
@@ -44,6 +47,10 @@ interface QuizForm {
   rewardPools: RewardPool[];
   entryFee: string;
   entryFeeToken: string;
+  // Fun quiz mode - no rewards/fees/stakes
+  isFunQuiz: boolean;
+  // Cover image
+  coverImageUrl: string;
 }
 
 // Default pools: 100 first (70%), 900 next (30%)
@@ -52,13 +59,18 @@ const DEFAULT_POOLS: RewardPool[] = [
   { tier: 2, name: 'Fast Finishers', winnerCount: 900, percentage: 30 },
 ];
 
-const STEPS = ['Basic Info', 'Questions', 'Rewards', 'Settings', 'Preview'];
+// Steps change based on fun quiz mode
+const REWARD_STEPS = ['Basic Info', 'Questions', 'Rewards', 'Settings', 'Preview'];
+const FUN_STEPS = ['Basic Info', 'Questions', 'Settings', 'Preview'];
 
 export default function CreateQuizPage() {
   const router = useRouter();
   const { address: walletAddress, isConnected } = useAccount();
+  const { user: farcasterUser } = useFarcasterUser();
   const [step, setStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [createdQuizId, setCreatedQuizId] = useState<string | null>(null);
   const [form, setForm] = useState<QuizForm>({
     title: '',
     description: '',
@@ -76,23 +88,44 @@ export default function CreateQuizPage() {
     rewardPools: DEFAULT_POOLS,
     entryFee: '',
     entryFeeToken: '',
+    // Fun quiz mode
+    isFunQuiz: false,
+    // Cover image
+    coverImageUrl: '',
   });
+
+  // Dynamic steps based on fun quiz mode
+  const STEPS = form.isFunQuiz ? FUN_STEPS : REWARD_STEPS;
 
   const updateForm = (updates: Partial<QuizForm>) => {
     setForm(prev => ({ ...prev, ...updates }));
   };
 
   const canProceed = () => {
-    switch (step) {
-      case 0: return form.title.trim().length >= 3;
-      case 1: return form.questions.length >= 1 && form.questions.every(q => 
-        q.text.trim() && q.options.filter(o => o.trim()).length >= 2
-      );
-      case 2: return form.rewardToken.trim() && parseFloat(form.rewardAmount) > 0 && 
-        (form.useCustomPools ? form.rewardPools.reduce((sum, p) => sum + p.percentage, 0) === 100 : true);
-      case 3: return form.winnerLimit > 0 && form.timePerQuestion >= 10;
-      case 4: return isConnected && !!walletAddress; // Must connect wallet to publish
-      default: return true;
+    // For fun quiz, steps are: Basic Info (0), Questions (1), Settings (2), Preview (3)
+    // For reward quiz, steps are: Basic Info (0), Questions (1), Rewards (2), Settings (3), Preview (4)
+    if (form.isFunQuiz) {
+      switch (step) {
+        case 0: return form.title.trim().length >= 3;
+        case 1: return form.questions.length >= 1 && form.questions.every(q => 
+          q.text.trim() && q.options.filter(o => o.trim()).length >= 2
+        );
+        case 2: return form.timePerQuestion >= 10; // Settings
+        case 3: return true; // Preview - fun quiz doesn't need wallet
+        default: return true;
+      }
+    } else {
+      switch (step) {
+        case 0: return form.title.trim().length >= 3;
+        case 1: return form.questions.length >= 1 && form.questions.every(q => 
+          q.text.trim() && q.options.filter(o => o.trim()).length >= 2
+        );
+        case 2: return form.rewardToken.trim() && parseFloat(form.rewardAmount) > 0 && 
+          (form.useCustomPools ? form.rewardPools.reduce((sum, p) => sum + p.percentage, 0) === 100 : true);
+        case 3: return form.winnerLimit > 0 && form.timePerQuestion >= 10;
+        case 4: return isConnected && !!walletAddress; // Must connect wallet to publish
+        default: return true;
+      }
     }
   };
 
@@ -107,7 +140,8 @@ export default function CreateQuizPage() {
   const [publishError, setPublishError] = useState<string | null>(null);
 
   const handlePublish = async () => {
-    if (!isConnected || !walletAddress) {
+    // Fun quiz doesn't require wallet connection
+    if (!form.isFunQuiz && (!isConnected || !walletAddress)) {
       setPublishError('Please connect your wallet first');
       return;
     }
@@ -116,6 +150,55 @@ export default function CreateQuizPage() {
     setPublishError(null);
     
     try {
+      // For fun quiz, skip blockchain entirely
+      if (form.isFunQuiz) {
+        console.log('[CreateQuiz] Creating fun quiz (no blockchain)...');
+        
+        const res = await fetch('/api/quizzes', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-wallet-address': walletAddress || 'fun-quiz-creator',
+          },
+          body: JSON.stringify({
+            title: form.title,
+            description: form.description || null,
+            questions: form.questions.map(q => ({
+              text: q.text,
+              options: q.options.filter(o => o.trim()),
+              correctIndex: q.correctIndex,
+              imageUrl: (q as Question & { imageUrl?: string }).imageUrl || null,
+            })),
+            timePerQuestion: form.timePerQuestion,
+            startsAt: form.startsAt || null,
+            endsAt: form.endsAt || null,
+            // Fun quiz specific
+            isFunQuiz: true,
+            coverImageUrl: form.coverImageUrl || null,
+            // Creator info
+            creatorFid: farcasterUser?.fid || null,
+            creatorUsername: farcasterUser?.username || null,
+            // No rewards for fun quiz
+            rewardToken: null,
+            rewardAmount: '0',
+            winnerLimit: 0,
+          }),
+        });
+
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          console.error('[CreateQuiz] Database save failed:', errorData);
+          throw new Error(errorData.message || 'Failed to save quiz to database');
+        }
+        
+        const data = await res.json();
+        console.log('[CreateQuiz] Fun quiz created successfully:', data.quiz.id);
+        setCreatedQuizId(data.quiz.id);
+        setShowShareModal(true);
+        return;
+      }
+
+      // Regular quiz with rewards - requires blockchain transaction
       // Calculate total winners from pools
       const totalWinners = form.rewardPools.reduce((sum, p) => sum + p.winnerCount, 0);
       
@@ -147,7 +230,7 @@ export default function CreateQuizPage() {
         form.stakeToken || '',
         form.stakeAmount || '0',
         stakeToken?.decimals || 18,
-        walletAddress
+        walletAddress!
       );
 
       if (!txResult.success) {
@@ -172,12 +255,18 @@ export default function CreateQuizPage() {
       }
 
       // Step 2: Save quiz to database with contract info
-      console.log('[CreateQuiz] Saving to database...');
+      const totalWinnersForDb = form.rewardPools.reduce((sum, p) => sum + p.winnerCount, 0);
+      console.log('[CreateQuiz] Saving to database...', {
+        rewardToken: form.rewardToken,
+        rewardAmount: form.rewardAmount,
+        winnerLimit: totalWinnersForDb,
+        questionsCount: form.questions.length,
+      });
       const res = await fetch('/api/quizzes', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'x-wallet-address': walletAddress,
+          'x-wallet-address': walletAddress!,
         },
         body: JSON.stringify({
           title: form.title,
@@ -186,6 +275,7 @@ export default function CreateQuizPage() {
             text: q.text,
             options: q.options.filter(o => o.trim()),
             correctIndex: q.correctIndex,
+            imageUrl: (q as Question & { imageUrl?: string }).imageUrl || null,
           })),
           rewardToken: form.rewardToken,
           rewardAmount: form.rewardAmount,
@@ -205,6 +295,12 @@ export default function CreateQuizPage() {
           // Contract info
           contractQuizId: quizIdForContract,
           depositTxHash: txResult.txHash,
+          // Cover image
+          coverImageUrl: form.coverImageUrl || null,
+          isFunQuiz: false,
+          // Creator info
+          creatorFid: farcasterUser?.fid || null,
+          creatorUsername: farcasterUser?.username || null,
         }),
       });
 
@@ -215,7 +311,8 @@ export default function CreateQuizPage() {
       }
       const data = await res.json();
       console.log('[CreateQuiz] Quiz created successfully:', data.quiz.id);
-      router.push(`/quiz/${data.quiz.id}`);
+      setCreatedQuizId(data.quiz.id);
+      setShowShareModal(true);
     } catch (error) {
       console.error('[CreateQuiz] Failed to publish quiz:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to publish quiz. Please try again.';
@@ -274,10 +371,35 @@ export default function CreateQuizPage() {
       <div className="p-4">
         {step === 0 && <BasicInfoStep form={form} updateForm={updateForm} />}
         {step === 1 && <QuestionsStep form={form} updateForm={updateForm} />}
-        {step === 2 && <RewardsStep form={form} updateForm={updateForm} walletAddress={walletAddress ?? null} />}
-        {step === 3 && <SettingsStep form={form} updateForm={updateForm} walletAddress={walletAddress ?? null} />}
-        {step === 4 && <PreviewStep form={form} walletConnected={isConnected} />}
+        {form.isFunQuiz ? (
+          <>
+            {step === 2 && <SettingsStep form={form} updateForm={updateForm} walletAddress={walletAddress ?? null} isFunQuiz={true} />}
+            {step === 3 && <PreviewStep form={form} walletConnected={isConnected} />}
+          </>
+        ) : (
+          <>
+            {step === 2 && <RewardsStep form={form} updateForm={updateForm} walletAddress={walletAddress ?? null} />}
+            {step === 3 && <SettingsStep form={form} updateForm={updateForm} walletAddress={walletAddress ?? null} isFunQuiz={false} />}
+            {step === 4 && <PreviewStep form={form} walletConnected={isConnected} />}
+          </>
+        )}
       </div>
+
+      {/* Share Modal */}
+      {showShareModal && createdQuizId && (
+        <ShareModal
+          isOpen={showShareModal}
+          onClose={() => {
+            setShowShareModal(false);
+            router.push(`/quiz/${createdQuizId}`);
+          }}
+          quizId={createdQuizId}
+          quizTitle={form.title}
+          questionCount={form.questions.length}
+          isFunQuiz={form.isFunQuiz}
+          winnerCount={form.isFunQuiz ? 0 : form.rewardPools.reduce((sum, p) => sum + p.winnerCount, 0)}
+        />
+      )}
 
       {/* Footer */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-background border-t border-foreground/10">
@@ -311,6 +433,35 @@ export default function CreateQuizPage() {
 function BasicInfoStep({ form, updateForm }: { form: QuizForm; updateForm: (u: Partial<QuizForm>) => void }) {
   return (
     <div className="space-y-4">
+      {/* Fun Quiz Toggle */}
+      <Card className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-purple-500/20">
+        <label className="flex items-center justify-between cursor-pointer">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🎉</span>
+            <div>
+              <span className="text-sm font-medium text-foreground">Fun Quiz Mode</span>
+              <p className="text-xs text-foreground-muted">No rewards, fees, or stakes - just for fun!</p>
+            </div>
+          </div>
+          <div className="relative">
+            <input
+              type="checkbox"
+              checked={form.isFunQuiz}
+              onChange={e => updateForm({ isFunQuiz: e.target.checked })}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-foreground/20 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+          </div>
+        </label>
+        {form.isFunQuiz && (
+          <div className="mt-3 pt-3 border-t border-purple-500/20">
+            <p className="text-xs text-purple-300">
+              ✨ Perfect for onboarding, surveys, education, and community testing
+            </p>
+          </div>
+        )}
+      </Card>
+
       <div>
         <label className="block text-sm font-medium text-foreground mb-2">
           Quiz Title *
@@ -341,6 +492,19 @@ function BasicInfoStep({ form, updateForm }: { form: QuizForm; updateForm: (u: P
         <p className="text-xs text-foreground-muted mt-1">
           {form.description.length}/500 characters
         </p>
+      </div>
+
+      {/* Cover Image Upload */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-2">
+          Cover Image (optional)
+        </label>
+        <ImageUpload
+          currentImage={form.coverImageUrl}
+          onUpload={(url) => updateForm({ coverImageUrl: url })}
+          onRemove={() => updateForm({ coverImageUrl: '' })}
+          folder="covers"
+        />
       </div>
     </div>
   );
@@ -691,7 +855,7 @@ function RewardsStep({ form, updateForm, walletAddress }: { form: QuizForm; upda
   );
 }
 
-function SettingsStep({ form, updateForm, walletAddress }: { form: QuizForm; updateForm: (u: Partial<QuizForm>) => void; walletAddress: string | null }) {
+function SettingsStep({ form, updateForm, walletAddress, isFunQuiz }: { form: QuizForm; updateForm: (u: Partial<QuizForm>) => void; walletAddress: string | null; isFunQuiz: boolean }) {
   const selectedStakeToken = getTokenByAddress(form.stakeToken);
 
   return (
@@ -708,7 +872,7 @@ function SettingsStep({ form, updateForm, walletAddress }: { form: QuizForm; upd
           max="120"
         />
         <p className="text-xs text-foreground-muted mt-1">
-          Faster answers = higher rank = better rewards
+          {isFunQuiz ? 'Take your time to answer each question' : 'Faster answers = higher rank = better rewards'}
         </p>
       </div>
 
@@ -736,53 +900,69 @@ function SettingsStep({ form, updateForm, walletAddress }: { form: QuizForm; upd
         />
       </div>
 
-      <Card className="mt-6">
-        <h3 className="text-sm font-medium text-foreground mb-3">
-          🔒 Stake Requirement (optional)
-        </h3>
-        <p className="text-xs text-foreground-muted mb-3">
-          Require participants to stake tokens to join
-        </p>
-        <div className="space-y-3">
-          <TokenSelector
-            value={form.stakeToken}
-            onChange={(address) => updateForm({ stakeToken: address })}
-            walletAddress={walletAddress}
-            showBalance={false}
-            placeholder="Select stake token"
-          />
-          <div className="flex items-center gap-2">
-            <Input
-              type="number"
-              value={form.stakeAmount}
-              onChange={e => updateForm({ stakeAmount: e.target.value })}
-              placeholder="Amount"
-              min="0"
-              step="0.01"
-              className="flex-1"
+      {/* Stake Requirement - only for reward quizzes */}
+      {!isFunQuiz && (
+        <Card className="mt-6">
+          <h3 className="text-sm font-medium text-foreground mb-3">
+            🔒 Stake Requirement (optional)
+          </h3>
+          <p className="text-xs text-foreground-muted mb-3">
+            Require participants to stake tokens to join
+          </p>
+          <div className="space-y-3">
+            <TokenSelector
+              value={form.stakeToken}
+              onChange={(address) => updateForm({ stakeToken: address })}
+              walletAddress={walletAddress}
+              showBalance={false}
+              placeholder="Select stake token"
             />
-            {selectedStakeToken && (
-              <span className="px-3 py-2 rounded-lg bg-surface border border-foreground/10 text-foreground font-medium">
-                {selectedStakeToken.symbol}
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                value={form.stakeAmount}
+                onChange={e => updateForm({ stakeAmount: e.target.value })}
+                placeholder="Amount"
+                min="0"
+                step="0.01"
+                className="flex-1"
+              />
+              {selectedStakeToken && (
+                <span className="px-3 py-2 rounded-lg bg-surface border border-foreground/10 text-foreground font-medium">
+                  {selectedStakeToken.symbol}
+                </span>
+              )}
+            </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      )}
     </div>
   );
 }
 
 function PreviewStep({ form, walletConnected }: { form: QuizForm; walletConnected: boolean }) {
-  const totalWinners = form.rewardPools.reduce((sum, p) => sum + p.winnerCount, 0);
+  const totalWinners = form.isFunQuiz ? 0 : form.rewardPools.reduce((sum, p) => sum + p.winnerCount, 0);
   const rewardToken = getTokenByAddress(form.rewardToken);
   const entryToken = getTokenByAddress(form.entryFeeToken);
   const stakeToken = getTokenByAddress(form.stakeToken);
 
   return (
     <div className="space-y-4">
-      {/* Wallet Connection Warning */}
-      {!walletConnected && (
+      {/* Fun Quiz Banner */}
+      {form.isFunQuiz && (
+        <Card className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 border-purple-500/30">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">🎉</span>
+            <div>
+              <p className="text-sm font-medium text-foreground">Fun Quiz Mode</p>
+              <p className="text-xs text-foreground-muted">No rewards, fees, or stakes - just for fun!</p>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Wallet Connection Warning - only for reward quizzes */}
+      {!form.isFunQuiz && !walletConnected && (
         <Card className="bg-warning/10 border-warning/20">
           <div className="flex items-center gap-2">
             <span className="text-lg">⚠️</span>
@@ -790,6 +970,19 @@ function PreviewStep({ form, walletConnected }: { form: QuizForm; walletConnecte
               <p className="text-sm font-medium text-foreground">Wallet Not Connected</p>
               <p className="text-xs text-foreground-muted">Connect your wallet in the header to publish this quiz</p>
             </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Cover Image Preview */}
+      {form.coverImageUrl && (
+        <Card className="p-0 overflow-hidden">
+          <div className="relative w-full h-40">
+            <img
+              src={form.coverImageUrl}
+              alt="Cover"
+              className="w-full h-full object-cover"
+            />
           </div>
         </Card>
       )}
@@ -809,58 +1002,64 @@ function PreviewStep({ form, walletConnected }: { form: QuizForm; walletConnecte
             <p className="text-xs text-foreground-muted">Time per Question</p>
             <p className="text-lg font-semibold text-foreground">{form.timePerQuestion}s</p>
           </div>
-          <div>
-            <p className="text-xs text-foreground-muted">Total Winners</p>
-            <p className="text-lg font-semibold text-foreground">{totalWinners.toLocaleString()}</p>
-          </div>
-          <div>
-            <p className="text-xs text-foreground-muted">Total Pool</p>
-            <p className="text-lg font-semibold text-success">
-              {form.rewardAmount} {rewardToken?.symbol || 'tokens'}
-            </p>
-          </div>
+          {!form.isFunQuiz && (
+            <>
+              <div>
+                <p className="text-xs text-foreground-muted">Total Winners</p>
+                <p className="text-lg font-semibold text-foreground">{totalWinners.toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-xs text-foreground-muted">Total Pool</p>
+                <p className="text-lg font-semibold text-success">
+                  {form.rewardAmount} {rewardToken?.symbol || 'tokens'}
+                </p>
+              </div>
+            </>
+          )}
         </div>
       </Card>
 
-      {/* Reward Pools Preview */}
-      <Card>
-        <h3 className="text-sm font-medium text-foreground mb-3">🏆 Reward Distribution</h3>
-        <div className="space-y-2">
-          {form.rewardPools.map((pool) => {
-            const poolAmount = form.rewardAmount 
-              ? ((parseFloat(form.rewardAmount) * pool.percentage) / 100).toFixed(2)
-              : '0';
-            const perWinner = pool.winnerCount > 0 && form.rewardAmount
-              ? ((parseFloat(form.rewardAmount) * pool.percentage) / 100 / pool.winnerCount).toFixed(4)
-              : '0';
+      {/* Reward Pools Preview - only for reward quizzes */}
+      {!form.isFunQuiz && (
+        <Card>
+          <h3 className="text-sm font-medium text-foreground mb-3">🏆 Reward Distribution</h3>
+          <div className="space-y-2">
+            {form.rewardPools.map((pool) => {
+              const poolAmount = form.rewardAmount 
+                ? ((parseFloat(form.rewardAmount) * pool.percentage) / 100).toFixed(2)
+                : '0';
+              const perWinner = pool.winnerCount > 0 && form.rewardAmount
+                ? ((parseFloat(form.rewardAmount) * pool.percentage) / 100 / pool.winnerCount).toFixed(4)
+                : '0';
 
-            return (
-              <div key={pool.tier} className="flex items-center justify-between p-2 rounded-lg bg-surface/50">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">
-                    {pool.tier}
-                  </span>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{pool.name}</p>
-                    <p className="text-xs text-foreground-muted">
-                      Top {pool.tier === 1 ? pool.winnerCount : `${form.rewardPools.slice(0, pool.tier - 1).reduce((s, p) => s + p.winnerCount, 0) + 1}-${form.rewardPools.slice(0, pool.tier).reduce((s, p) => s + p.winnerCount, 0)}`}
+              return (
+                <div key={pool.tier} className="flex items-center justify-between p-2 rounded-lg bg-surface/50">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">
+                      {pool.tier}
+                    </span>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{pool.name}</p>
+                      <p className="text-xs text-foreground-muted">
+                        Top {pool.tier === 1 ? pool.winnerCount : `${form.rewardPools.slice(0, pool.tier - 1).reduce((s, p) => s + p.winnerCount, 0) + 1}-${form.rewardPools.slice(0, pool.tier).reduce((s, p) => s + p.winnerCount, 0)}`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-success">
+                      {poolAmount} {rewardToken?.symbol || ''} ({pool.percentage}%)
                     </p>
+                    <p className="text-xs text-foreground-muted">{perWinner}/winner</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium text-success">
-                    {poolAmount} {rewardToken?.symbol || ''} ({pool.percentage}%)
-                  </p>
-                  <p className="text-xs text-foreground-muted">{perWinner}/winner</p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </Card>
+              );
+            })}
+          </div>
+        </Card>
+      )}
 
-      {/* Entry Fee */}
-      {form.entryFee && form.entryFeeToken && (
+      {/* Entry Fee - only for reward quizzes */}
+      {!form.isFunQuiz && form.entryFee && form.entryFeeToken && (
         <Card className="bg-warning/10 border-warning/20">
           <div className="flex items-center gap-2">
             <span className="text-lg">💰</span>
@@ -874,8 +1073,8 @@ function PreviewStep({ form, walletConnected }: { form: QuizForm; walletConnecte
         </Card>
       )}
 
-      {/* Stake Requirement */}
-      {form.stakeToken && form.stakeAmount && (
+      {/* Stake Requirement - only for reward quizzes */}
+      {!form.isFunQuiz && form.stakeToken && form.stakeAmount && (
         <Card className="bg-primary/10 border-primary/20">
           <div className="flex items-center gap-2">
             <span className="text-lg">🔒</span>

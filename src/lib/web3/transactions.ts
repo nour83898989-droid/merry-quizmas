@@ -75,7 +75,16 @@ async function getWalletProvider(): Promise<{ request: (args: { method: string; 
             return hash;
           }
           if (method === 'eth_chainId') {
-            return `0x${walletClient.chain.id.toString(16)}`;
+            // Handle case where walletClient.chain might be undefined
+            if (walletClient.chain?.id) {
+              return `0x${walletClient.chain.id.toString(16)}`;
+            }
+            // Fallback to window.ethereum if chain is not available
+            if (typeof window !== 'undefined' && window.ethereum) {
+              return window.ethereum.request({ method, params });
+            }
+            // Default to active chain ID from config
+            return `0x${ACTIVE_CHAIN_ID.toString(16)}`;
           }
           // For other methods, try window.ethereum as fallback
           if (typeof window !== 'undefined' && window.ethereum) {
@@ -622,7 +631,7 @@ export async function createQuizOnChain(
     }
 
     // Check and request approval for reward token
-    const currentAllowance = await getAllowance(rewardToken, walletAddress, QUIZ_REWARD_POOL_ADDRESS);
+    let currentAllowance = await getAllowance(rewardToken, walletAddress, QUIZ_REWARD_POOL_ADDRESS);
     console.log('[createQuizOnChain] Current allowance:', currentAllowance.toString());
     
     if (currentAllowance < rewardAmountBigInt) {
@@ -639,6 +648,25 @@ export async function createQuizOnChain(
           return { success: false, error: 'Token approval failed' };
         }
         console.log('[createQuizOnChain] Approval confirmed');
+        
+        // Wait a bit for RPC to sync, then verify allowance
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Re-check allowance to make sure it's updated
+        currentAllowance = await getAllowance(rewardToken, walletAddress, QUIZ_REWARD_POOL_ADDRESS);
+        console.log('[createQuizOnChain] Allowance after approval:', currentAllowance.toString());
+        
+        if (currentAllowance < rewardAmountBigInt) {
+          // Wait more and retry
+          console.log('[createQuizOnChain] Allowance still insufficient, waiting more...');
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          currentAllowance = await getAllowance(rewardToken, walletAddress, QUIZ_REWARD_POOL_ADDRESS);
+          console.log('[createQuizOnChain] Allowance after extra wait:', currentAllowance.toString());
+          
+          if (currentAllowance < rewardAmountBigInt) {
+            return { success: false, error: 'Token approval not confirmed. Please try again.' };
+          }
+        }
       }
     }
 

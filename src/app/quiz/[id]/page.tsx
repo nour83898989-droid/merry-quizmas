@@ -227,7 +227,7 @@ export default function QuizDetailPage({ params }: { params: Promise<{ id: strin
           <StatCard 
             icon={<UsersIcon className="w-5 h-5" />}
             label="Spots Left"
-            value={`${quiz.remaining_spots}/${quiz.total_spots}`}
+            value={quiz.remaining_spots === -1 ? '∞' : `${quiz.remaining_spots}/${quiz.total_spots}`}
           />
           <StatCard 
             icon={<CoinIcon className="w-5 h-5 text-success" />}
@@ -311,7 +311,7 @@ export default function QuizDetailPage({ params }: { params: Promise<{ id: strin
         )}
 
         {/* Warnings */}
-        {quiz.remaining_spots <= 5 && (
+        {quiz.remaining_spots > 0 && quiz.remaining_spots <= 5 && (
           <Card className="bg-warning/10 border-warning/30">
             <div className="flex items-center gap-2 text-warning">
               <AlertIcon className="w-5 h-5" />
@@ -337,7 +337,7 @@ export default function QuizDetailPage({ params }: { params: Promise<{ id: strin
           onClick={handleStart} 
           fullWidth 
           isLoading={starting}
-          disabled={quiz.remaining_spots === 0 || !isConnected}
+          disabled={(quiz.remaining_spots === 0) || !isConnected}
           className="christmas-gradient text-white"
         >
           {quiz.remaining_spots === 0 ? 'No Spots Available' : !isConnected ? '🔗 Connect Wallet First' : '◆ Start Quiz'}

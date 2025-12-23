@@ -195,8 +195,10 @@ export type Database = {
       quizzes: {
         Row: {
           contract_quiz_id: string | null
+          cover_image_url: string | null
           created_at: string | null
           creator_fid: number | null
+          creator_username: string | null
           creator_wallet: string
           current_winners: number | null
           deposit_tx_hash: string | null
@@ -205,6 +207,7 @@ export type Database = {
           entry_fee: string | null
           entry_fee_token: string | null
           id: string
+          is_fun_quiz: boolean | null
           nft_artwork_url: string | null
           nft_enabled: boolean | null
           questions_json: Json
@@ -224,8 +227,10 @@ export type Database = {
         }
         Insert: {
           contract_quiz_id?: string | null
+          cover_image_url?: string | null
           created_at?: string | null
           creator_fid?: number | null
+          creator_username?: string | null
           creator_wallet: string
           current_winners?: number | null
           deposit_tx_hash?: string | null
@@ -234,6 +239,7 @@ export type Database = {
           entry_fee?: string | null
           entry_fee_token?: string | null
           id?: string
+          is_fun_quiz?: boolean | null
           nft_artwork_url?: string | null
           nft_enabled?: boolean | null
           questions_json: Json
@@ -253,8 +259,10 @@ export type Database = {
         }
         Update: {
           contract_quiz_id?: string | null
+          cover_image_url?: string | null
           created_at?: string | null
           creator_fid?: number | null
+          creator_username?: string | null
           creator_wallet?: string
           current_winners?: number | null
           deposit_tx_hash?: string | null
@@ -263,6 +271,7 @@ export type Database = {
           entry_fee?: string | null
           entry_fee_token?: string | null
           id?: string
+          is_fun_quiz?: boolean | null
           nft_artwork_url?: string | null
           nft_enabled?: boolean | null
           questions_json?: Json

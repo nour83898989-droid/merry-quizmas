@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import Image from 'next/image';
 import { Card } from '@/components/ui/card';
 import { getTokenDisplayName } from '@/lib/web3/config';
 
@@ -25,6 +26,10 @@ interface QuizCardProps {
   rewardPools?: RewardPool[];
   totalPoolAmount?: string;
   entryFee?: string | null;
+  isFunQuiz?: boolean;
+  coverImageUrl?: string | null;
+  creatorUsername?: string | null;
+  createdAt?: string;
   onClick?: () => void;
 }
 
@@ -41,6 +46,10 @@ export function QuizCard({
   rewardPools,
   totalPoolAmount,
   entryFee,
+  isFunQuiz = false,
+  coverImageUrl,
+  creatorUsername,
+  createdAt,
   onClick,
 }: QuizCardProps) {
   const [now, setNow] = useState(() => Date.now());
@@ -55,15 +64,45 @@ export function QuizCard({
     return endsAt && new Date(endsAt).getTime() - now < 2 * 60 * 60 * 1000;
   }, [endsAt, now]);
 
+  // Format created date
+  const formattedDate = useMemo(() => {
+    if (!createdAt) return null;
+    const date = new Date(createdAt);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }, [createdAt]);
+
   return (
     <Card 
       variant="interactive" 
       onClick={onClick}
       className="relative overflow-hidden"
     >
+      {/* Cover Image */}
+      {coverImageUrl && (
+        <div className="relative w-full h-32 -mx-4 -mt-4 mb-4">
+          <Image
+            src={coverImageUrl}
+            alt={title}
+            fill
+            className="object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" />
+        </div>
+      )}
+
       {/* Badges */}
-      <div className="absolute top-3 right-3 flex gap-2">
-        {isLimitedSpots && (
+      <div className={`absolute ${coverImageUrl ? 'top-2' : 'top-3'} right-3 flex gap-2 flex-wrap justify-end`}>
+        {isFunQuiz && (
+          <span className="px-2 py-1 text-xs font-medium bg-purple-500/20 text-purple-300 rounded-full">
+            🎉 For Fun
+          </span>
+        )}
+        {!isFunQuiz && isLimitedSpots && (
           <span className="px-2 py-1 text-xs font-medium bg-warning/20 text-warning rounded-full">
             {remainingSpots} spots left
           </span>
@@ -73,7 +112,7 @@ export function QuizCard({
             Ending soon
           </span>
         )}
-        {stakeRequired && (
+        {!isFunQuiz && stakeRequired && (
           <span className="px-2 py-1 text-xs font-medium bg-primary/20 text-primary rounded-full">
             Stake required
           </span>
@@ -86,10 +125,23 @@ export function QuizCard({
           {title}
         </h3>
         {description && (
-          <p className="text-sm text-foreground-muted mb-4 line-clamp-2">
+          <p className="text-sm text-foreground-muted mb-2 line-clamp-2">
             {description}
           </p>
         )}
+        {/* Creator and Date */}
+        <div className="flex items-center gap-2 text-xs text-foreground-muted">
+          {creatorUsername && (
+            <>
+              <UserIcon className="w-3 h-3" />
+              <span>@{creatorUsername}</span>
+              <span>•</span>
+            </>
+          )}
+          {formattedDate && (
+            <span>{formattedDate}</span>
+          )}
+        </div>
       </div>
 
       {/* Stats */}
@@ -101,33 +153,43 @@ export function QuizCard({
           </span>
         </div>
         
-        <div className="flex items-center gap-2">
-          <CoinIcon className="w-4 h-4 text-success" />
-          <span className="text-sm font-medium text-success">
-            {totalPoolAmount || rewardPerWinner} {rewardToken ? getTokenDisplayName(rewardToken) : 'tokens'}
-          </span>
-        </div>
-
-        {entryFee && (
-          <div className="flex items-center gap-1">
-            <span className="text-xs px-1.5 py-0.5 bg-warning/20 text-warning rounded">
-              💰 {entryFee} entry
+        {isFunQuiz ? (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-purple-300">
+              ✨ Just for fun
             </span>
           </div>
-        )}
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              <CoinIcon className="w-4 h-4 text-success" />
+              <span className="text-sm font-medium text-success">
+                {totalPoolAmount || rewardPerWinner} {rewardToken ? getTokenDisplayName(rewardToken) : 'tokens'}
+              </span>
+            </div>
 
-        {!isLimitedSpots && remainingSpots > 0 && (
-          <div className="flex items-center gap-2 ml-auto">
-            <UsersIcon className="w-4 h-4 text-foreground-muted" />
-            <span className="text-sm text-foreground-muted">
-              {remainingSpots} spots
-            </span>
-          </div>
+            {entryFee && (
+              <div className="flex items-center gap-1">
+                <span className="text-xs px-1.5 py-0.5 bg-warning/20 text-warning rounded">
+                  💰 {entryFee} entry
+                </span>
+              </div>
+            )}
+
+            {!isLimitedSpots && remainingSpots > 0 && (
+              <div className="flex items-center gap-2 ml-auto">
+                <UsersIcon className="w-4 h-4 text-foreground-muted" />
+                <span className="text-sm text-foreground-muted">
+                  {remainingSpots} spots
+                </span>
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* Reward Pools Preview */}
-      {rewardPools && rewardPools.length > 0 && (
+      {/* Reward Pools Preview - only for reward quizzes */}
+      {!isFunQuiz && rewardPools && rewardPools.length > 0 && (
         <div className="mt-3 pt-3 border-t border-foreground/10">
           <div className="flex items-center gap-2 mb-2">
             <TrophyIcon className="w-4 h-4 text-primary" />
@@ -221,6 +283,14 @@ function TrophyIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M5 3h14a1 1 0 011 1v3a6 6 0 01-6 6h-4a6 6 0 01-6-6V4a1 1 0 011-1zM12 13v5m-4 3h8" />
+    </svg>
+  );
+}
+
+function UserIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
     </svg>
   );
 }

@@ -1,0 +1,143 @@
+# Implementation Plan
+
+- [x] 1. Database Schema Updates
+  - [x] 1.1 Add is_fun_quiz and cover_image_url columns to quizzes table
+    - Run Supabase migration to add new columns
+    - _Requirements: 1.1, 1.2, 2.1_
+  - [x] 1.2 Create quiz-images storage bucket in Supabase
+    - Create bucket with public read access
+    - Set up folders: covers/, questions/
+    - _Requirements: 2.3_
+
+- [x] 2. Fun Quiz Mode Implementation
+  - [x] 2.1 Add FunQuizToggle component to create quiz page
+    - Add toggle switch at top of form
+    - When enabled, hide reward/fee/stake sections
+    - _Requirements: 1.1_
+  - [ ] 2.2 Write property test for fun quiz mode hiding sections
+    - **Property 1: Fun Quiz Mode Hides Reward Sections**
+    - **Validates: Requirements 1.1**
+  - [x] 2.3 Update quiz creation API to handle fun quiz mode
+    - Skip blockchain transaction when is_fun_quiz=true
+    - Save directly to database with is_fun_quiz flag
+    - _Requirements: 1.3_
+  - [ ] 2.4 Write property test for fun quiz skipping blockchain
+    - **Property 3: Fun Quiz Skips Blockchain**
+    - **Validates: Requirements 1.3**
+  - [x] 2.5 Update quiz display to show fun quiz indicator
+    - Add "For Fun" badge on quiz cards
+    - Show message on quiz detail page
+    - _Requirements: 1.2, 1.4_
+  - [x] 2.6 Allow joining fun quiz without wallet
+    - Skip wallet connection check for fun quizzes
+    - _Requirements: 1.5_
+
+- [ ] 3. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 4. Image Upload Implementation
+  - [x] 4.1 Create image upload API route
+    - Handle file upload to Supabase Storage
+    - Return public URL
+    - Validate file type and size
+    - _Requirements: 2.3, 2.6_
+  - [ ] 4.2 Write property test for image upload round trip
+    - **Property 4: Image Upload Round Trip**
+    - **Validates: Requirements 2.3**
+  - [x] 4.3 Create ImageUpload component
+    - File picker with preview
+    - Upload progress indicator
+    - Error handling with retry
+    - _Requirements: 2.1, 2.2, 2.6_
+  - [x] 4.4 Add cover image upload to create quiz page
+    - Add ImageUpload in Basic Info step
+    - Store URL in form state
+    - _Requirements: 2.1_
+  - [ ] 4.5 Add question image upload to questions step
+    - Add ImageUpload per question
+    - Store URL in question object
+    - _Requirements: 2.2_
+  - [x] 4.6 Display cover image in quiz listings
+    - Show thumbnail in quiz cards
+    - Fallback to default image
+    - _Requirements: 2.4_
+  - [ ] 4.7 Write property test for cover image rendering
+    - **Property 5: Cover Image Rendering**
+    - **Validates: Requirements 2.4**
+  - [ ] 4.8 Display question images during quiz play
+    - Render image above question text
+    - Handle loading state
+    - _Requirements: 2.5_
+  - [ ] 4.9 Write property test for question image rendering order
+    - **Property 6: Question Image Rendering Order**
+    - **Validates: Requirements 2.5**
+
+- [ ] 5. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 6. Share Functionality Implementation
+  - [x] 6.1 Create ShareModal component
+    - Modal with copy link, Farcaster, Twitter buttons
+    - Quiz title and URL display
+    - Cast template: "🎯 New Quiz Alert!\n\n\"{title}\"\n📝 {X} questions\n🏆 {X} winners can earn rewards!\n\nJoin now 👇"
+    - For fun quiz: "🎯 Test your knowledge!\n\n\"{title}\"\n📝 {X} questions\n\nPlay now 👇"
+    - _Requirements: 3.1_
+  - [x] 6.2 Implement copy to clipboard functionality
+    - Use navigator.clipboard API
+    - Show success toast
+    - _Requirements: 3.4_
+  - [ ] 6.3 Write property test for clipboard copy
+    - **Property 7: Share URL Clipboard Copy**
+    - **Validates: Requirements 3.4**
+  - [x] 6.4 Implement Farcaster share with SDK composeCast
+    - Use @farcaster/miniapp-sdk composeCast when in mini app
+    - Fallback to Warpcast compose URL when not in mini app
+    - Pre-fill with quiz title and embed link
+    - _Requirements: 3.2, 3.3_
+  - [ ] 6.5 Write property test for Farcaster share
+    - **Property 8: Farcaster composeCast called in mini app**
+    - **Validates: Requirements 3.2**
+  - [x] 6.6 Implement Twitter share
+    - Open Twitter intent URL
+    - Pre-fill with quiz title and link
+    - _Requirements: 3.5_
+  - [ ] 6.7 Write property test for Twitter URL format
+    - **Property 9: Twitter Share URL Format**
+    - **Validates: Requirements 3.5**
+  - [x] 6.8 Show share modal after quiz publish
+    - Trigger modal on successful publish
+    - Pass quiz ID and title
+    - _Requirements: 3.1_
+
+- [ ] 7. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 8. Admin Panel Delete Fix
+  - [x] 8.1 Fix quiz delete API endpoint
+    - Implement proper DELETE handler
+    - Cascade delete related data (sessions, rewards)
+    - _Requirements: 4.1_
+  - [ ] 8.2 Write property test for quiz delete
+    - **Property 10: Quiz Delete Removes Data**
+    - **Validates: Requirements 4.1**
+  - [x] 8.3 Fix poll delete API endpoint
+    - Implement proper DELETE handler
+    - Delete associated votes
+    - _Requirements: 4.2_
+  - [ ] 8.4 Write property test for poll delete
+    - **Property 11: Poll Delete Removes Data**
+    - **Validates: Requirements 4.2**
+  - [x] 8.5 Fix leaderboard entry delete
+    - Implement proper DELETE handler
+    - _Requirements: 4.3_
+  - [ ] 8.6 Write property test for leaderboard delete
+    - **Property 12: Leaderboard Entry Delete**
+    - **Validates: Requirements 4.3**
+  - [x] 8.7 Add success/error feedback in admin panel
+    - Show toast on success
+    - Show error message on failure
+    - Refresh list after delete
+    - _Requirements: 4.4, 4.5_
+
+- [ ] 9. Final Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.

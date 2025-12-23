@@ -130,8 +130,10 @@ export function validateQuizConfig(config: Partial<QuizConfig>): ValidationResul
     errors.push('Reward amount is required');
   } else {
     try {
-      const amount = BigInt(config.rewardAmount);
-      if (amount <= 0n) {
+      // Handle both integer and decimal strings
+      const amountStr = String(config.rewardAmount);
+      const amount = parseFloat(amountStr);
+      if (isNaN(amount) || amount <= 0) {
         errors.push('Reward amount must be positive');
       }
     } catch {
@@ -172,12 +174,15 @@ export function validateQuizConfig(config: Partial<QuizConfig>): ValidationResul
     }
   }
 
-  // Date validation (optional)
-  if (config.startTime && config.endTime) {
+  // Date validation (optional) - only validate if both are non-empty strings
+  if (config.startTime && config.startTime.trim() && config.endTime && config.endTime.trim()) {
     const start = new Date(config.startTime);
     const end = new Date(config.endTime);
-    if (end <= start) {
-      errors.push('End time must be after start time');
+    // Only validate if both dates are valid
+    if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+      if (end <= start) {
+        errors.push('End time must be after start time');
+      }
     }
   }
 

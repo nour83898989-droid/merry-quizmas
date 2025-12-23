@@ -41,6 +41,7 @@ export default function ProfilePage() {
   const [tokenBalances, setTokenBalances] = useState<TokenBalance[]>([]);
   const [loadingBalances, setLoadingBalances] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [unclaimedRewards, setUnclaimedRewards] = useState<{ total: string; count: number }>({ total: '0', count: 0 });
 
   useEffect(() => {
     if (isConnected && address) {
@@ -88,21 +89,31 @@ export default function ProfilePage() {
         });
       }
 
-      // Parse recent activities from winners
+      // Parse rewards data for unclaimed rewards and recent activities
       if (winnersRes.ok) {
-        const winnersData = await winnersRes.json();
-        const recentActivities: RecentActivity[] = (winnersData.claims || []).slice(0, 5).map((claim: {
+        const rewardsData = await winnersRes.json();
+        
+        // Set unclaimed rewards from summary
+        if (rewardsData.summary) {
+          setUnclaimedRewards({
+            total: rewardsData.summary.totalPending || '0',
+            count: rewardsData.summary.pendingCount || 0,
+          });
+        }
+        
+        // Parse recent activities from rewards
+        const recentActivities: RecentActivity[] = (rewardsData.rewards || []).slice(0, 5).map((reward: {
           id: string;
-          quiz_title?: string;
-          reward_amount?: number;
+          quizTitle?: string;
+          amount?: number;
           status?: string;
-          created_at?: string;
+          completedAt?: string;
         }) => ({
-          id: claim.id,
-          quizTitle: claim.quiz_title || 'Quiz',
+          id: reward.id,
+          quizTitle: reward.quizTitle || 'Quiz',
           result: 'win' as const,
-          reward: claim.reward_amount?.toString(),
-          date: claim.created_at ? new Date(claim.created_at).toLocaleDateString() : '',
+          reward: reward.amount?.toString(),
+          date: reward.completedAt ? new Date(reward.completedAt).toLocaleDateString() : '',
         }));
         setActivities(recentActivities);
       }
@@ -259,6 +270,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Unclaimed Rewards */}
+        {parseInt(unclaimedRewards.total) > 0 && (
         <Card className="christmas-card relative overflow-hidden">
           <div className="absolute top-2 right-2">
             <Gift className="w-12 h-12 opacity-50" />
@@ -266,13 +278,17 @@ export default function ProfilePage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-foreground-muted">Unclaimed Rewards</p>
-              <p className="text-2xl font-bold text-success">250 tokens</p>
+              <p className="text-2xl font-bold text-success">{unclaimedRewards.total} tokens</p>
+              {unclaimedRewards.count > 0 && (
+                <p className="text-xs text-foreground-muted">{unclaimedRewards.count} reward{unclaimedRewards.count > 1 ? 's' : ''} pending</p>
+              )}
             </div>
             <Button onClick={() => router.push('/claim')} className="christmas-gradient text-white">
               Claim Now
             </Button>
           </div>
         </Card>
+        )}
 
         {/* Recent Activity */}
         <Card>

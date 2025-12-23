@@ -111,7 +111,15 @@ async function getWalletProvider(): Promise<{ request: (args: { method: string; 
             throw new Error(`Method ${method} not supported without window.ethereum`);
           }
           if (method === 'eth_chainId') {
-            return `0x${walletClient.chain.id.toString(16)}`;
+            // Handle case where walletClient.chain might be undefined
+            if (walletClient.chain?.id) {
+              return `0x${walletClient.chain.id.toString(16)}`;
+            }
+            // Fallback to window.ethereum
+            if (typeof window !== 'undefined' && window.ethereum) {
+              return window.ethereum.request({ method, params });
+            }
+            throw new Error('Chain ID not available');
           }
           // Fallback to window.ethereum
           if (typeof window !== 'undefined' && window.ethereum) {
@@ -374,6 +382,12 @@ export async function getERC20Balance(tokenAddress: string, walletAddress: strin
         data,
       }, 'latest'],
     });
+
+    // Handle undefined or null result
+    if (!result) {
+      console.warn(`[getERC20Balance] No result for token ${tokenAddress}`);
+      return '0';
+    }
 
     return BigInt(result as string).toString();
   } catch (error) {
