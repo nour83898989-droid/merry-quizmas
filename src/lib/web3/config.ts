@@ -3,6 +3,18 @@
  * Configuration for blockchain interactions on Base network
  */
 
+// Base Builder Code for transaction attribution
+// This is appended to transaction calldata for Base ecosystem tracking
+// See: https://docs.base.org/builder-code
+export const BASE_BUILDER_CODE = 'bc_gy096wvf';
+
+// Helper to append Builder Code to calldata
+export function appendBuilderCode(calldata: string): string {
+  // Convert builder code to hex and append to calldata
+  const builderCodeHex = Buffer.from(BASE_BUILDER_CODE).toString('hex');
+  return calldata + builderCodeHex;
+}
+
 // Base Mainnet configuration
 export const BASE_CHAIN_ID = 8453;
 export const BASE_RPC_URL = 'https://mainnet.base.org';

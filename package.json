@@ -14,7 +14,9 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
-    "test:e2e:report": "playwright show-report"
+    "test:e2e:report": "playwright show-report",
+    "test:wallet": "playwright test --config=playwright.synpress.config.ts",
+    "test:wallet:debug": "DEBUG=synpress* playwright test --config=playwright.synpress.config.ts --debug"
   },
   "dependencies": {
     "@coinbase/onchainkit": "^1.1.2",
@@ -32,6 +34,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
+    "@synthetixio/synpress": "^4.1.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",

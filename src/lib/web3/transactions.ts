@@ -3,7 +3,7 @@
  * Functions for onchain token transfers with wallet approval
  */
 
-import { ACTIVE_CHAIN_ID, getChainIdHex, isCorrectNetwork, getChainConfig, IS_TESTNET, QUIZ_REWARD_POOL_ADDRESS } from './config';
+import { ACTIVE_CHAIN_ID, getChainIdHex, isCorrectNetwork, getChainConfig, IS_TESTNET, QUIZ_REWARD_POOL_ADDRESS, appendBuilderCode } from './config';
 import { getWalletClient, getPublicClient } from '@wagmi/core';
 import { wagmiConfig } from '@/components/providers/farcaster-provider';
 
@@ -271,12 +271,13 @@ export async function approveToken(
     const data = APPROVE_SELECTOR + padAddress(spenderAddress) + padUint256(amount);
 
     // Send transaction - this will prompt wallet approval
+    // Append Base Builder Code for transaction attribution
     const txHash = await provider.request({
       method: 'eth_sendTransaction',
       params: [{
         from: walletAddress,
         to: tokenAddress,
-        data,
+        data: appendBuilderCode(data),
       }],
     });
 
@@ -316,12 +317,13 @@ export async function transferToken(
     const data = TRANSFER_SELECTOR + padAddress(toAddress) + padUint256(amount);
 
     // Send transaction - this will prompt wallet approval
+    // Append Base Builder Code for transaction attribution
     const txHash = await provider.request({
       method: 'eth_sendTransaction',
       params: [{
         from: walletAddress,
         to: tokenAddress,
-        data,
+        data: appendBuilderCode(data),
       }],
     });
 
@@ -357,12 +359,15 @@ export async function transferETH(
     }
 
     // Send ETH transaction
+    // Append Base Builder Code for transaction attribution
+    const builderCodeHex = '0x' + Buffer.from('bc_gy096wvf').toString('hex');
     const txHash = await provider.request({
       method: 'eth_sendTransaction',
       params: [{
         from: walletAddress,
         to: toAddress,
         value: '0x' + amountWei.toString(16),
+        data: builderCodeHex,
       }],
     });
 
@@ -683,12 +688,13 @@ export async function createQuizOnChain(
 
     console.log('[createQuizOnChain] Sending transaction with data:', data.slice(0, 74) + '...');
 
+    // Append Base Builder Code for transaction attribution
     const txHash = await provider.request({
       method: 'eth_sendTransaction',
       params: [{
         from: walletAddress,
         to: QUIZ_REWARD_POOL_ADDRESS,
-        data,
+        data: appendBuilderCode(data),
       }],
     });
 
@@ -777,12 +783,13 @@ export async function joinQuizOnChain(
     const quizIdBytes32 = stringToBytes32(quizId).slice(2);
     const data = JOIN_QUIZ_SELECTOR + quizIdBytes32;
 
+    // Append Base Builder Code for transaction attribution
     const txHash = await provider.request({
       method: 'eth_sendTransaction',
       params: [{
         from: walletAddress,
         to: QUIZ_REWARD_POOL_ADDRESS,
-        data,
+        data: appendBuilderCode(data),
       }],
     });
 
@@ -824,12 +831,13 @@ export async function claimRewardOnChain(
     const quizIdBytes32 = stringToBytes32(quizId).slice(2);
     const data = CLAIM_REWARD_SELECTOR + quizIdBytes32;
 
+    // Append Base Builder Code for transaction attribution
     const txHash = await provider.request({
       method: 'eth_sendTransaction',
       params: [{
         from: walletAddress,
         to: QUIZ_REWARD_POOL_ADDRESS,
-        data,
+        data: appendBuilderCode(data),
       }],
     });
 
@@ -869,12 +877,13 @@ export async function returnStakeOnChain(
     const quizIdBytes32 = stringToBytes32(quizId).slice(2);
     const data = RETURN_STAKE_SELECTOR + quizIdBytes32;
 
+    // Append Base Builder Code for transaction attribution
     const txHash = await provider.request({
       method: 'eth_sendTransaction',
       params: [{
         from: walletAddress,
         to: QUIZ_REWARD_POOL_ADDRESS,
-        data,
+        data: appendBuilderCode(data),
       }],
     });
 
