@@ -28,13 +28,15 @@ export function ShareModal({
 
   if (!isOpen) return null;
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://merry-quizmas.vercel.app';
+  // Use production URL for sharing (frontend URL, not mini app URL)
+  const baseUrl = 'https://merry-quizmas.vercel.app';
   const quizUrl = `${baseUrl}/quiz/${quizId}`;
 
-  // Generate cast text based on quiz type
+  // Generate cast text based on quiz type - include creator tags
+  const creatorTags = '\n\nBuilt with @ukhy89 @papusiek1111';
   const castText = isFunQuiz
-    ? `🎯 Test your knowledge!\n\n"${quizTitle}"\n📝 ${questionCount} questions\n\nPlay now 👇`
-    : `🎯 New Quiz Alert!\n\n"${quizTitle}"\n📝 ${questionCount} questions\n🏆 ${winnerCount} winners can earn rewards!\n\nJoin now 👇`;
+    ? `🎯 Test your knowledge!\n\n"${quizTitle}"\n📝 ${questionCount} questions\n\nPlay now 👇${creatorTags}`
+    : `🎯 New Quiz Alert!\n\n"${quizTitle}"\n📝 ${questionCount} questions\n🏆 ${winnerCount} winners can earn rewards!\n\nJoin now 👇${creatorTags}`;
 
   const handleCopyLink = async () => {
     try {
