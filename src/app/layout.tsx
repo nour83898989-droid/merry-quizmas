@@ -47,6 +47,9 @@ export async function generateMetadata(): Promise<Metadata> {
       images: [`${baseUrl}/og-image.png`],
     },
     other: {
+      // Base App verification
+      "base:app_id": "694a82624d3a403912ed7c96",
+      // Farcaster MiniApp config
       "fc:miniapp": JSON.stringify({
         version: "next",
         imageUrl: `${baseUrl}/heroimage.png`,
