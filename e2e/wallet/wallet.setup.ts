@@ -14,16 +14,16 @@ const BASE_SEPOLIA_NETWORK = {
   blockExplorerUrl: 'https://sepolia.basescan.org',
 };
 
-// Test wallet seed phrase - use deployer wallet for testing
-// IMPORTANT: This should match DEPLOYER_PRIVATE_KEY in .env.local
-const TEST_SEED_PHRASE = process.env.TEST_WALLET_SEED_PHRASE || 'test test test test test test test test test test test junk';
+// Use DEPLOYER_PRIVATE_KEY from .env.local
+// Remove '0x' prefix if present
+const PRIVATE_KEY = (process.env.DEPLOYER_PRIVATE_KEY || '').replace(/^0x/, '');
 const TEST_PASSWORD = 'Tester@1234';
 
 export default defineWalletSetup(TEST_PASSWORD, async (context, walletPage) => {
   const metamask = new MetaMask(context, walletPage, TEST_PASSWORD);
 
-  // Import wallet using seed phrase
-  await metamask.importWallet(TEST_SEED_PHRASE);
+  // Import wallet using private key
+  await metamask.importWalletFromPrivateKey(PRIVATE_KEY);
 
   // Add Base Sepolia network
   await metamask.addNetwork(BASE_SEPOLIA_NETWORK);
