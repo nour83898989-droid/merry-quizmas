@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { farcasterMiniApp as miniAppConnector } from '@farcaster/miniapp-wagmi-connector';
 import { base, baseSepolia } from 'viem/chains';
 import { http } from 'viem';
+import { injected } from 'wagmi/connectors';
 
 // Use testnet based on env
 const IS_TESTNET = process.env.NEXT_PUBLIC_USE_TESTNET === 'true';
@@ -14,14 +15,17 @@ const activeChain = IS_TESTNET ? baseSepolia : base;
 
 const queryClient = new QueryClient();
 
-// Simple wagmi config like geoguesser - only farcasterMiniApp connector
+// Wagmi config with farcasterMiniApp + injected for browser wallets
 export const wagmiConfig = createConfig({
   chains: [base, baseSepolia],
   transports: {
     [base.id]: http(),
     [baseSepolia.id]: http(),
   },
-  connectors: [miniAppConnector()],
+  connectors: [
+    miniAppConnector(),
+    injected(),
+  ],
   ssr: true,
   multiInjectedProviderDiscovery: true,
 });
