@@ -36,5 +36,8 @@
       "https://merry-quizmas.vercel.app/heroimage.png"
     ],
     "webhookUrl": "https://merry-quizmas.vercel.app/api/webhook"
+  },
+  "baseBuilder": {
+    "ownerAddress": "0x26331e0d4c7fc168462d56ec36629d22012f4d88"
   }
 }
