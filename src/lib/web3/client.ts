@@ -97,10 +97,23 @@ async function getProvider(): Promise<{ request: (args: { method: string; params
  * Get wallet provider for write operations
  */
 async function getWalletProvider(): Promise<{ request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } | null> {
-  // Try wagmi wallet client first
+  // Try Farcaster Mini App SDK provider first (Warplet)
+  try {
+    const { sdk } = await import('@farcaster/miniapp-sdk');
+    const provider = await sdk.wallet.getEthereumProvider().catch(() => null);
+    if (provider && (provider as { request?: unknown })?.request) {
+      console.log('[Client] Using Farcaster SDK provider');
+      return provider as { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> };
+    }
+  } catch (e) {
+    console.log('[Client] Farcaster SDK provider not available:', e);
+  }
+
+  // Try wagmi wallet client
   try {
     const walletClient = await getWalletClient(wagmiConfig);
     if (walletClient) {
+      console.log('[Client] Using wagmi wallet client');
       return {
         request: async ({ method, params }) => {
           if (method === 'wallet_switchEthereumChain' || method === 'wallet_addEthereumChain') {
@@ -135,6 +148,7 @@ async function getWalletProvider(): Promise<{ request: (args: { method: string; 
   
   // Fallback to window.ethereum
   if (typeof window !== 'undefined' && window.ethereum) {
+    console.log('[Client] Using window.ethereum');
     return window.ethereum;
   }
   

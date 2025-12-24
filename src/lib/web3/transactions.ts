@@ -27,15 +27,28 @@ export interface TransactionResult {
 }
 
 /**
- * Get wallet provider - tries wagmi first, falls back to window.ethereum
+ * Get wallet provider - tries Farcaster SDK first, then wagmi, falls back to window.ethereum
  */
 async function getWalletProvider(): Promise<{ request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } | null> {
-  // Try wagmi wallet client first (works in Farcaster mini app)
+  // Try Farcaster Mini App SDK provider first (Warplet)
+  try {
+    const { sdk } = await import('@farcaster/miniapp-sdk');
+    const provider = await sdk.wallet.getEthereumProvider().catch(() => null);
+    if (provider && (provider as { request?: unknown })?.request) {
+      console.log('[Transactions] Using Farcaster SDK provider');
+      return provider as { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> };
+    }
+  } catch (e) {
+    console.log('[Transactions] Farcaster SDK provider not available:', e);
+  }
+
+  // Try wagmi wallet client (works in browser with connected wallet)
   try {
     const walletClient = await getWalletClient(wagmiConfig);
     const publicClient = getPublicClient(wagmiConfig);
     
     if (walletClient) {
+      console.log('[Transactions] Using wagmi wallet client');
       return {
         request: async ({ method, params }) => {
           // Map common methods to viem wallet client
@@ -100,6 +113,7 @@ async function getWalletProvider(): Promise<{ request: (args: { method: string; 
   
   // Fallback to window.ethereum (browser wallets)
   if (typeof window !== 'undefined' && window.ethereum) {
+    console.log('[Transactions] Using window.ethereum');
     return window.ethereum;
   }
   
