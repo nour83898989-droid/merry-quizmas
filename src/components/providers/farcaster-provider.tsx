@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
 import { base, baseSepolia } from 'viem/chains';
 import { injected, coinbaseWallet } from 'wagmi/connectors';
+import { MiniKitProvider } from '@coinbase/onchainkit/minikit';
 
 // Use testnet based on env
 const IS_TESTNET = process.env.NEXT_PUBLIC_USE_TESTNET === 'true';
@@ -164,9 +165,22 @@ function FarcasterInitializer({
       // PARALLEL DETECTION: Check all 3 platforms
       console.log('[Platform] Starting detection...');
       
-      // 1. Check Base App (Coinbase Wallet in-app browser)
-      const isBaseApp = typeof window !== 'undefined' && 
-        (window.ethereum as { isCoinbaseWallet?: boolean })?.isCoinbaseWallet === true;
+      // 1. Check Base App using MiniKit
+      let isBaseApp = false;
+      try {
+        const { isInMiniApp } = await import('@coinbase/onchainkit/minikit');
+        isBaseApp = isInMiniApp();
+        if (isBaseApp) {
+          console.log('[Platform] Base MiniKit detected');
+        }
+      } catch {
+        // Fallback: Check Coinbase Wallet in-app browser
+        isBaseApp = typeof window !== 'undefined' && 
+          (window.ethereum as { isCoinbaseWallet?: boolean })?.isCoinbaseWallet === true;
+        if (isBaseApp) {
+          console.log('[Platform] Coinbase Wallet detected');
+        }
+      }
       
       // 2. Check Farcaster MiniApp
       let isFarcaster = false;
@@ -304,15 +318,17 @@ export function FarcasterProvider({ children }: { children: ReactNode }) {
   }), [isReady, isInMiniApp, platform, platformType, user, authToken, getAuthToken]);
 
   return (
-    <WagmiProvider config={wagmiConfig}>
-      <QueryClientProvider client={queryClient}>
-        <FarcasterContext.Provider value={contextValue}>
-          <FarcasterInitializer onReady={handleReady}>
-            <AutoConnectWallet isReady={isReady} platform={platform} />
-            {children}
-          </FarcasterInitializer>
-        </FarcasterContext.Provider>
-      </QueryClientProvider>
-    </WagmiProvider>
+    <MiniKitProvider>
+      <WagmiProvider config={wagmiConfig}>
+        <QueryClientProvider client={queryClient}>
+          <FarcasterContext.Provider value={contextValue}>
+            <FarcasterInitializer onReady={handleReady}>
+              <AutoConnectWallet isReady={isReady} platform={platform} />
+              {children}
+            </FarcasterInitializer>
+          </FarcasterContext.Provider>
+        </QueryClientProvider>
+      </WagmiProvider>
+    </MiniKitProvider>
   );
 }
