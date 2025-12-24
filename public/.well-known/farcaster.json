@@ -38,6 +38,6 @@
     "webhookUrl": "https://merry-quizmas.vercel.app/api/webhook"
   },
   "baseBuilder": {
-    "ownerAddress": "0x26331e0d4c7fc168462d56ec36629d22012f4d88"
+    "ownerAddress": "0xAFf0244070a126525D45D334F2e3A3670F1A7CD1"
   }
 }
