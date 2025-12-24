@@ -13,7 +13,8 @@ const activeChain = IS_TESTNET ? baseSepolia : base;
 
 const queryClient = new QueryClient();
 
-// Create wagmi config with farcasterMiniApp as FIRST connector (per official docs)
+// Create wagmi config with all connectors
+// Order: farcasterMiniApp (index 0), coinbaseWallet (index 1), injected (index 2)
 export const wagmiConfig = createConfig({
   chains: [base, baseSepolia],
   transports: {
@@ -21,12 +22,15 @@ export const wagmiConfig = createConfig({
     [baseSepolia.id]: http(),
   },
   connectors: [
-    farcasterMiniApp(),  // MUST be first - used as connectors[0] for connect
-    injected(),
-    coinbaseWallet({ appName: 'Merry Quizmas' }),
+    farcasterMiniApp(),      // index 0 - for Farcaster/Warpcast
+    coinbaseWallet({ appName: 'Merry Quizmas' }),  // index 1 - for Base App
+    injected(),              // index 2 - for browser wallets
   ],
   ssr: true,
 });
+
+// Platform types: farcaster (Warpcast), base (Base App), browser (standalone)
+type PlatformType = 'farcaster' | 'base' | 'browser';
 
 interface FarcasterUser {
   fid?: number;
@@ -38,8 +42,9 @@ interface FarcasterUser {
 interface FarcasterContextType {
   // SDK State
   isReady: boolean;
-  isInMiniApp: boolean;
-  platformType: 'mobile' | 'web' | null;
+  isInMiniApp: boolean;  // true for both Farcaster AND Base App
+  platform: PlatformType;  // NEW: specific platform detection
+  platformType: 'mobile' | 'web' | null;  // Farcaster client type
   
   // User State
   user: FarcasterUser | null;
@@ -57,6 +62,7 @@ interface FarcasterContextType {
 const FarcasterContext = createContext<FarcasterContextType>({
   isReady: false,
   isInMiniApp: false,
+  platform: 'browser',
   platformType: null,
   user: null,
   authToken: null,
@@ -74,45 +80,56 @@ export function useFarcaster() {
 export { farcasterMiniApp };
 
 
-// Auto-connect component - waits for isReady before attempting
-function AutoConnectWallet({ isReady, isInMiniApp }: { isReady: boolean; isInMiniApp: boolean }) {
+// Auto-connect component - handles all 3 platforms
+function AutoConnectWallet({ isReady, platform }: { isReady: boolean; platform: PlatformType }) {
   const { isConnected, address } = useAccount();
   const { connect, connectors, status } = useConnect();
   const [attempted, setAttempted] = useState(false);
   
   useEffect(() => {
     // Only auto-connect when:
-    // 1. SDK is ready (isReady = true)
-    // 2. In mini app
+    // 1. SDK is ready
+    // 2. In a mini app (Farcaster OR Base App)
     // 3. Not already connected
     // 4. Haven't attempted yet
     // 5. Not currently connecting
-    if (isReady && isInMiniApp && !isConnected && !attempted && connectors.length > 0 && status !== 'pending') {
+    const shouldAutoConnect = isReady && platform !== 'browser' && !isConnected && !attempted && connectors.length > 0 && status !== 'pending';
+    
+    if (shouldAutoConnect) {
       setAttempted(true);
-      const farcasterConnector = connectors[0]; // farcasterMiniApp is first
-      console.log('[Farcaster] Auto-connecting with connector:', farcasterConnector?.name);
       
-      // Use async connect with error handling
-      connect(
-        { connector: farcasterConnector },
-        {
-          onSuccess: (data) => {
-            console.log('[Farcaster] Auto-connect success:', data.accounts?.[0]);
-          },
-          onError: (error) => {
-            console.error('[Farcaster] Auto-connect failed:', error);
-            // Reset attempted to allow retry on next render
-            setAttempted(false);
-          },
-        }
-      );
+      // Select connector based on platform
+      let connector;
+      if (platform === 'farcaster') {
+        connector = connectors[0]; // farcasterMiniApp
+        console.log('[Platform] Farcaster detected, using farcasterMiniApp connector');
+      } else if (platform === 'base') {
+        connector = connectors[1]; // coinbaseWallet
+        console.log('[Platform] Base App detected, using coinbaseWallet connector');
+      }
+      
+      if (connector) {
+        console.log('[Platform] Auto-connecting with:', connector.name);
+        connect(
+          { connector },
+          {
+            onSuccess: (data) => {
+              console.log('[Platform] Auto-connect success:', data.accounts?.[0]);
+            },
+            onError: (error) => {
+              console.error('[Platform] Auto-connect failed:', error);
+              setAttempted(false); // Allow retry
+            },
+          }
+        );
+      }
     }
-  }, [isReady, isInMiniApp, isConnected, attempted, connect, connectors, status]);
+  }, [isReady, platform, isConnected, attempted, connect, connectors, status]);
   
-  // Log connection status for debugging
+  // Log connection status
   useEffect(() => {
     if (isConnected && address) {
-      console.log('[Farcaster] Wallet connected:', address);
+      console.log('[Platform] Wallet connected:', address);
     }
   }, [isConnected, address]);
   
@@ -120,7 +137,7 @@ function AutoConnectWallet({ isReady, isInMiniApp }: { isReady: boolean; isInMin
 }
 
 interface InitData {
-  isInMiniApp: boolean;
+  platform: PlatformType;
   platformType: 'mobile' | 'web' | null;
   user: FarcasterUser | null;
   authToken: string | null;
@@ -138,21 +155,30 @@ function FarcasterInitializer({
     
     async function init() {
       const result: InitData = {
-        isInMiniApp: false,
+        platform: 'browser',
         platformType: null,
         user: null,
         authToken: null,
       };
       
+      // PARALLEL DETECTION: Check all 3 platforms
+      console.log('[Platform] Starting detection...');
+      
+      // 1. Check Base App (Coinbase Wallet in-app browser)
+      const isBaseApp = typeof window !== 'undefined' && 
+        (window.ethereum as { isCoinbaseWallet?: boolean })?.isCoinbaseWallet === true;
+      
+      // 2. Check Farcaster MiniApp
+      let isFarcaster = false;
       try {
         const { sdk } = await import('@farcaster/miniapp-sdk');
+        isFarcaster = await sdk.isInMiniApp().catch(() => false);
         
-        // STEP 1: Check if in mini app FIRST (before calling ready)
-        result.isInMiniApp = await sdk.isInMiniApp().catch(() => false);
-        console.log('[Farcaster] isInMiniApp:', result.isInMiniApp);
-        
-        if (result.isInMiniApp) {
-          // STEP 2: Get user context
+        if (isFarcaster) {
+          result.platform = 'farcaster';
+          console.log('[Platform] Farcaster MiniApp detected');
+          
+          // Get Farcaster user context
           try {
             const ctx = await sdk.context;
             if (ctx?.user) {
@@ -162,43 +188,51 @@ function FarcasterInitializer({
                 displayName: ctx.user.displayName,
                 pfpUrl: ctx.user.pfpUrl,
               };
-              console.log('[Farcaster] User:', result.user?.username);
+              console.log('[Platform] Farcaster user:', result.user?.username);
             }
             
             // Get platform type (mobile or web/desktop)
             if (ctx?.client?.clientFid) {
-              // Warpcast mobile has clientFid
               result.platformType = 'mobile';
             } else {
               result.platformType = 'web';
             }
           } catch (ctxError) {
-            console.log('[Farcaster] Context error:', ctxError);
+            console.log('[Platform] Farcaster context error:', ctxError);
           }
           
-          // STEP 3: Get Quick Auth token (experimental API in SDK v0.2.x)
+          // Get Quick Auth token
           try {
-            // quickAuth returns { token, expiresAt } - SDK handles caching
             const authResult = await sdk.experimental.quickAuth();
             if (authResult?.token) {
               result.authToken = authResult.token;
-              console.log('[Farcaster] Quick Auth token obtained');
+              console.log('[Platform] Farcaster Quick Auth obtained');
             }
           } catch (authError) {
-            // Quick Auth may not be available in all contexts
-            console.log('[Farcaster] Quick Auth not available:', authError);
+            console.log('[Platform] Quick Auth not available:', authError);
           }
           
-          // STEP 4: Call ready() LAST - after getting context and auth
+          // Call ready() to hide splash screen
           try {
             await sdk.actions.ready();
-            console.log('[Farcaster] SDK ready() called - splash screen hidden');
+            console.log('[Platform] Farcaster SDK ready() called');
           } catch (readyError) {
-            console.log('[Farcaster] SDK ready error:', readyError);
+            console.log('[Platform] SDK ready error:', readyError);
           }
         }
       } catch (e) {
-        console.log('[Farcaster] SDK init error:', e);
+        console.log('[Platform] Farcaster SDK not available:', e);
+      }
+      
+      // 3. Determine final platform (Farcaster takes priority if both detected)
+      if (isFarcaster) {
+        result.platform = 'farcaster';
+      } else if (isBaseApp) {
+        result.platform = 'base';
+        console.log('[Platform] Base App detected');
+      } else {
+        result.platform = 'browser';
+        console.log('[Platform] Browser detected');
       }
       
       if (!cancelled) {
@@ -217,14 +251,17 @@ function FarcasterInitializer({
 
 export function FarcasterProvider({ children }: { children: ReactNode }) {
   const [isReady, setIsReady] = useState(false);
-  const [isInMiniApp, setIsInMiniApp] = useState(false);
+  const [platform, setPlatform] = useState<PlatformType>('browser');
   const [platformType, setPlatformType] = useState<'mobile' | 'web' | null>(null);
   const [user, setUser] = useState<FarcasterUser | null>(null);
   const [authToken, setAuthToken] = useState<string | null>(null);
   
+  // isInMiniApp = true for both Farcaster AND Base App (not browser)
+  const isInMiniApp = platform !== 'browser';
+  
   // Callback to get fresh auth token (SDK handles caching)
   const getAuthToken = useCallback(async (): Promise<string | null> => {
-    if (!isInMiniApp) return null;
+    if (platform !== 'farcaster') return null;
     
     try {
       const { sdk } = await import('@farcaster/miniapp-sdk');
@@ -233,21 +270,21 @@ export function FarcasterProvider({ children }: { children: ReactNode }) {
         setAuthToken(authResult.token);
         return authResult.token;
       }
-      return authToken; // Return cached token
+      return authToken;
     } catch (e) {
-      console.log('[Farcaster] getAuthToken error:', e);
-      return authToken; // Return cached token if refresh fails
+      console.log('[Platform] getAuthToken error:', e);
+      return authToken;
     }
-  }, [isInMiniApp, authToken]);
+  }, [platform, authToken]);
   
   const handleReady = useCallback((data: InitData) => {
-    setIsInMiniApp(data.isInMiniApp);
+    setPlatform(data.platform);
     setPlatformType(data.platformType);
     setUser(data.user);
     setAuthToken(data.authToken);
     setIsReady(true);
-    console.log('[Farcaster] Provider ready:', { 
-      isInMiniApp: data.isInMiniApp, 
+    console.log('[Platform] Provider ready:', { 
+      platform: data.platform,
       user: data.user?.username,
       hasToken: !!data.authToken 
     });
@@ -256,6 +293,7 @@ export function FarcasterProvider({ children }: { children: ReactNode }) {
   const contextValue = useMemo(() => ({
     isReady,
     isInMiniApp,
+    platform,
     platformType,
     user,
     authToken,
@@ -263,15 +301,14 @@ export function FarcasterProvider({ children }: { children: ReactNode }) {
     getAuthToken,
     activeChain,
     isTestnet: IS_TESTNET,
-  }), [isReady, isInMiniApp, platformType, user, authToken, getAuthToken]);
+  }), [isReady, isInMiniApp, platform, platformType, user, authToken, getAuthToken]);
 
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <FarcasterContext.Provider value={contextValue}>
           <FarcasterInitializer onReady={handleReady}>
-            {/* Only render AutoConnect after isReady to avoid race condition */}
-            <AutoConnectWallet isReady={isReady} isInMiniApp={isInMiniApp} />
+            <AutoConnectWallet isReady={isReady} platform={platform} />
             {children}
           </FarcasterInitializer>
         </FarcasterContext.Provider>
