@@ -23,7 +23,7 @@ export function ConnectButton({ onConnect, showDisconnect = false, size = 'md' }
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
   const { connect, connectors, isPending } = useConnect();
-  const { user: farcasterUser, isReady, isInMiniApp, platform } = useFarcaster();
+  const { user: farcasterUser, isReady, isInMiniApp } = useFarcaster();
   
   const [currentChainId, setCurrentChainId] = useState<number | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -86,42 +86,22 @@ export function ConnectButton({ onConnect, showDisconnect = false, size = 'md' }
     setError(null);
     
     try {
-      // Select connector based on platform
-      if (platform === 'farcaster') {
-        // Farcaster: use farcasterMiniApp connector (index 0)
-        console.log('[ConnectButton] Farcaster platform, using farcasterMiniApp connector');
-        connect({ connector: connectors[0] });
-        return;
-      }
+      // Simple connect like geoguesser - use injected or first available
+      const injectedConn = connectors.find(c => 
+        c.id === 'injected' || c.name.toLowerCase().includes('injected')
+      ) || connectors[0];
       
-      if (platform === 'base') {
-        // Base App: use coinbaseWallet connector (index 1)
-        console.log('[ConnectButton] Base App platform, using coinbaseWallet connector');
-        connect({ connector: connectors[1] });
-        return;
-      }
-      
-      // Browser: try injected first, then coinbase
-      const injectedConnector = connectors.find(c => 
-        /injected/i.test(c.id) || /metamask/i.test(c.id)
-      );
-      const coinbaseConnector = connectors.find(c => 
-        /coinbase/i.test(c.id)
-      );
-      
-      const connector = injectedConnector || coinbaseConnector || connectors[2] || connectors[0];
-      
-      if (connector) {
-        console.log('[ConnectButton] Browser, connecting with:', connector.name);
-        connect({ connector });
+      if (injectedConn) {
+        console.log('[ConnectButton] Connecting with:', injectedConn.name);
+        connect({ connector: injectedConn });
       } else {
-        setError('No wallet found. Please install MetaMask or Coinbase Wallet.');
+        setError('No wallet found. Please install a wallet.');
       }
     } catch (err) {
       console.error('Connect failed:', err);
       setError('Failed to connect. Please try again.');
     }
-  }, [connect, connectors, platform]);
+  }, [connect, connectors]);
 
   const handleSwitchChain = async (chainId: number) => {
     setIsSwitching(true);
