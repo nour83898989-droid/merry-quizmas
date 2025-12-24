@@ -8,7 +8,7 @@
     "version": "1",
     "name": "Merry Quizmas",
     "iconUrl": "https://merry-quizmas.vercel.app/icon.png",
-    "homeUrl": "https://merry-quizmas.vercel.app",
+    "homeUrl": "https://merry-quizmas.vercel.app/",
     "buttonTitle": "🎄 Play Quiz",
     "splashImageUrl": "https://merry-quizmas.vercel.app/splash.png",
     "splashBackgroundColor": "#0d0d0d",
@@ -23,8 +23,7 @@
       "blockchain"
     ],
     "requiredChains": [
-      "eip155:8453",
-      "eip155:84532"
+      "eip155:8453"
     ],
     "requiredCapabilities": [
       "wallet.getEthereumProvider"
