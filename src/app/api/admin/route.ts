@@ -11,26 +11,58 @@ export const dynamic = 'force-dynamic';
 
 const NEYNAR_API_KEY = process.env.NEYNAR_API_KEY || process.env.NEXT_PUBLIC_NEYNAR_API_KEY || 'NEYNAR_API_DOCS';
 
-// Lookup wallet address from FID using Neynar
-async function getWalletFromFid(fid: number): Promise<string | null> {
+// Lookup all wallet addresses from FID using Neynar
+async function getWalletsFromFid(fid: number): Promise<string[]> {
   try {
     const response = await fetch(`https://api.neynar.com/v2/farcaster/user/bulk?fids=${fid}`, {
       headers: { 'accept': 'application/json', 'api_key': NEYNAR_API_KEY }
     });
-    if (!response.ok) return null;
+    if (!response.ok) return [];
     const data = await response.json();
     const user = data?.users?.[0];
-    return user?.verified_addresses?.eth_addresses?.[0] || user?.custody_address || null;
+    const wallets: string[] = [];
+    
+    // Add all verified eth addresses
+    if (user?.verified_addresses?.eth_addresses) {
+      wallets.push(...user.verified_addresses.eth_addresses.map((w: string) => w.toLowerCase()));
+    }
+    // Add custody address as fallback
+    if (user?.custody_address) {
+      wallets.push(user.custody_address.toLowerCase());
+    }
+    
+    return [...new Set(wallets)]; // Remove duplicates
+  } catch {
+    return [];
+  }
+}
+
+// Get primary wallet from FID (for ban/unban operations)
+async function getWalletFromFid(fid: number): Promise<string | null> {
+  const wallets = await getWalletsFromFid(fid);
+  return wallets[0] || null;
+}
+
+// Lookup FID from wallet address using Neynar
+async function getFidFromWallet(walletAddress: string): Promise<number | null> {
+  try {
+    const response = await fetch(`https://api.neynar.com/v2/farcaster/user/by_verification?address=${walletAddress}`, {
+      headers: { 'accept': 'application/json', 'api_key': NEYNAR_API_KEY }
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data?.user?.fid || null;
   } catch {
     return null;
   }
 }
 
 // Check if wallet or FID is admin
+// Now supports checking all wallets connected to a FID via Neynar
 async function isAdmin(walletAddress?: string, fid?: number): Promise<{ isAdmin: boolean; role: string | null }> {
   const supabase = createServerClient();
   
-  // Check by wallet first
+  // Check by wallet first (direct match in admin_users)
   if (walletAddress) {
     const { data, error } = await supabase
       .from('admin_users')
@@ -38,14 +70,30 @@ async function isAdmin(walletAddress?: string, fid?: number): Promise<{ isAdmin:
       .eq('wallet_address', walletAddress.toLowerCase())
       .single();
     
-    if (error) console.log('[isAdmin] wallet check error:', error.message);
+    if (error && error.code !== 'PGRST116') console.log('[isAdmin] wallet check error:', error.message);
     if (data) {
       console.log('[isAdmin] Found by wallet:', walletAddress, 'role:', data.role);
       return { isAdmin: true, role: data.role };
     }
+    
+    // If wallet not found directly, try to find FID from wallet via Neynar
+    // Then check if that FID is admin
+    const fidFromWallet = await getFidFromWallet(walletAddress);
+    if (fidFromWallet) {
+      const { data: fidData } = await supabase
+        .from('admin_users')
+        .select('role')
+        .eq('fid', fidFromWallet)
+        .single();
+      
+      if (fidData) {
+        console.log('[isAdmin] Found by FID from wallet lookup:', fidFromWallet, 'role:', fidData.role);
+        return { isAdmin: true, role: fidData.role };
+      }
+    }
   }
   
-  // Check by FID
+  // Check by FID directly
   if (fid) {
     const { data, error } = await supabase
       .from('admin_users')
@@ -53,10 +101,26 @@ async function isAdmin(walletAddress?: string, fid?: number): Promise<{ isAdmin:
       .eq('fid', fid)
       .single();
     
-    if (error) console.log('[isAdmin] fid check error:', error.message);
+    if (error && error.code !== 'PGRST116') console.log('[isAdmin] fid check error:', error.message);
     if (data) {
       console.log('[isAdmin] Found by FID:', fid, 'role:', data.role);
       return { isAdmin: true, role: data.role };
+    }
+    
+    // If FID not found directly, get all wallets for this FID
+    // Then check if any of those wallets are admin
+    const walletsFromFid = await getWalletsFromFid(fid);
+    for (const wallet of walletsFromFid) {
+      const { data: walletData } = await supabase
+        .from('admin_users')
+        .select('role')
+        .eq('wallet_address', wallet)
+        .single();
+      
+      if (walletData) {
+        console.log('[isAdmin] Found by wallet from FID lookup:', wallet, 'role:', walletData.role);
+        return { isAdmin: true, role: walletData.role };
+      }
     }
   }
   
