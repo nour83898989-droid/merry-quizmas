@@ -32,26 +32,35 @@ async function isAdmin(walletAddress?: string, fid?: number): Promise<{ isAdmin:
   
   // Check by wallet first
   if (walletAddress) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('admin_users')
       .select('role')
       .eq('wallet_address', walletAddress.toLowerCase())
       .single();
     
-    if (data) return { isAdmin: true, role: data.role };
+    if (error) console.log('[isAdmin] wallet check error:', error.message);
+    if (data) {
+      console.log('[isAdmin] Found by wallet:', walletAddress, 'role:', data.role);
+      return { isAdmin: true, role: data.role };
+    }
   }
   
   // Check by FID
   if (fid) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('admin_users')
       .select('role')
       .eq('fid', fid)
       .single();
     
-    if (data) return { isAdmin: true, role: data.role };
+    if (error) console.log('[isAdmin] fid check error:', error.message);
+    if (data) {
+      console.log('[isAdmin] Found by FID:', fid, 'role:', data.role);
+      return { isAdmin: true, role: data.role };
+    }
   }
   
+  console.log('[isAdmin] Not found - wallet:', walletAddress, 'fid:', fid);
   return { isAdmin: false, role: null };
 }
 
@@ -168,16 +177,22 @@ export async function POST(request: NextRequest) {
     const fidHeader = request.headers.get('x-fid');
     const adminFid = fidHeader ? parseInt(fidHeader) : undefined;
     
+    console.log('[Admin POST] Headers - wallet:', adminWallet, 'fid:', adminFid);
+    
     if (!adminWallet && !adminFid) {
+      console.log('[Admin POST] No auth headers');
       return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
     }
 
     const { isAdmin: hasAccess, role } = await isAdmin(adminWallet || undefined, adminFid);
+    console.log('[Admin POST] isAdmin result:', hasAccess, 'role:', role);
+    
     if (!hasAccess) {
       return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
     }
 
     const body: AdminAction = await request.json();
+    console.log('[Admin POST] Action:', body.action, 'data:', JSON.stringify(body));
     const supabase = createServerClient();
 
     switch (body.action) {
@@ -314,23 +329,28 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'BAD_REQUEST', message: 'quizId required' }, { status: 400 });
         }
 
+        console.log('[Admin] delete_quiz started for:', body.quizId, 'by:', adminWallet || `fid:${adminFid}`);
+
         // Delete related winners
-        await supabase
+        const { error: winnersError } = await supabase
           .from('winners')
           .delete()
           .eq('quiz_id', body.quizId);
+        if (winnersError) console.log('[Admin] winners delete error:', winnersError);
 
         // Delete related attempts
-        await supabase
+        const { error: attemptsError } = await supabase
           .from('attempts')
           .delete()
           .eq('quiz_id', body.quizId);
+        if (attemptsError) console.log('[Admin] attempts delete error:', attemptsError);
 
         // Delete related reward_claims
-        await supabase
+        const { error: claimsError } = await supabase
           .from('reward_claims')
           .delete()
           .eq('quiz_id', body.quizId);
+        if (claimsError) console.log('[Admin] reward_claims delete error:', claimsError);
 
         // Soft delete the quiz
         const { error } = await supabase
@@ -338,7 +358,12 @@ export async function POST(request: NextRequest) {
           .update({ status: 'deleted' })
           .eq('id', body.quizId);
 
-        if (error) throw error;
+        if (error) {
+          console.log('[Admin] quiz update error:', error);
+          throw error;
+        }
+        
+        console.log('[Admin] delete_quiz completed for:', body.quizId);
         return NextResponse.json({ success: true, message: 'Quiz and related data deleted' });
       }
 

@@ -123,23 +123,29 @@ export default function AdminPage() {
 
   const handleAction = async (action: string, data: Record<string, unknown>) => {
     const headers = getAuthHeaders();
-    if (Object.keys(headers).length === 0) return;
+    if (Object.keys(headers).length === 0) {
+      alert('No authentication headers available');
+      return;
+    }
     setActionLoading(action);
     try {
+      console.log('[Admin] Sending action:', action, data, 'headers:', headers);
       const res = await fetch('/api/admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({ action, ...data }),
       });
       const result = await res.json();
+      console.log('[Admin] Response:', res.status, result);
       if (result.success) {
         fetchAdminData();
         setBanInput(''); setUnbanInput(''); setNewAdminInput(''); setLookupResult(null);
       } else {
-        alert(result.message || 'Action failed');
+        alert(result.message || result.error || 'Action failed');
       }
     } catch (error) {
       console.error('Action failed:', error);
+      alert('Action failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setActionLoading(null);
     }
